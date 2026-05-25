@@ -186,6 +186,124 @@ Parser 输出带 `quota_model` 字段标识类型，UI 据此选择渲染方式�
 
 ---
 
+## 自助添加 Provider（LLM 辅助分析）
+
+除了内置 parser，应用支持用户自助添加新 LLM 服务——不需要等开发者更新。
+
+### 流程
+
+```
+用户点击「添加」
+  → Playwright 打开浏览器 → 用户登录 → 导航到用量/账单页面
+  → 点击「分析」
+  → 应用截取页面 + 提取 DOM 可见文本摘要
+  → 发给 LLM 分析（使用已配置的任一 provider 的 API）
+  → LLM 返回：quota_model + fields（selector + 语义类型）
+  → 展示预览让用户确认
+```
+
+### 确认界面
+
+```
+┌─────────────────────────────────────┐
+│  检测结果                            │
+│  类型：余额型                         │
+│  余额：¥42.50    ← [.balance-amount]  │
+│  本月用量：380K  ← [.usage .number]   │
+│  套餐：V4 Pro    ← [.plan-badge]      │
+│                                     │
+│  [确认] [手动调整] [重新分析]          │
+└─────────────────────────────────────┘
+```
+
+- **确认**：保存为自定义 parser，立即生效
+- **手动调整**：用户在页面上点击元素重新标注
+- **重新分析**：重新发 LLM 请求（用于 LLM 结果不对时）
+
+### 分析 LLM 的选择
+
+**使用已配置的任一 provider**（不是正在被分析的那个）。
+
+原因：
+- 鸡生蛋问题 — 被分析的 provider 还没接入，无法用它调用 API
+- 已配置的 provider 有现成的 API key 和余额
+- 一次分析仅消耗 ~2K tokens，成本可忽略
+- 首次安装时至少有一个内置 parser（DeepSeek），可立即用作分析引擎
+
+边界：如果所有已配置 provider 都余额耗尽或过期，分析功能暂时不可用。此时需要等至少一个恢复，或手动编辑 parser 配置。
+
+### 发给 LLM 的 Prompt 结构
+
+```
+你是 token-panic 的页面分析器。
+
+分析以下 LLM 服务商的用量/账单页面，判断配额模型类型，
+提取关键数据字段和对应的 CSS selector。
+
+页面可见文本内容：
+[去除了 script/style 标签的 DOM 文本摘要]
+
+请返回严格 JSON：
+{
+  "quota_model": "balance" | "limit",
+  "confidence": 0.0 - 1.0,
+  "fields": [
+    {
+      "key": "字段标识",
+      "label": "页面显示的文字",
+      "selector": "CSS selector",
+      "type": "currency" | "tokens" | "text" | "percentage",
+      "sample_value": "页面显示的示例值"
+    }
+  ]
+}
+
+规则：
+- selector 必须是能从页面稳定提取该值的 CSS path
+- 如果页面布局不清晰或无法确定，降低 confidence
+- 不要猜测。无法确定的字段不要输出
+```
+
+### 存储格式（自定义 parser）
+
+```json
+{
+  "id": "custom-deepseek",
+  "name": "DeepSeek",
+  "url": "https://platform.deepseek.com/usage",
+  "quota_model": "balance",
+  "fields": {
+    "balance_remaining": {
+      "selector": ".balance-amount",
+      "type": "currency"
+    },
+    "monthly_usage": {
+      "selector": ".usage-table tr:last td:last",
+      "type": "tokens"
+    },
+    "plan_name": {
+      "selector": ".plan-badge",
+      "type": "text"
+    }
+  },
+  "created_by": "llm_analysis",
+  "last_verified": "2026-05-25"
+}
+```
+
+### 与内置 Parser 的关系
+
+```
+内置 parser（手工维护）          自定义 parser（LLM 生成）
+  deepseek.js       ← 精准       custom-1.json  ← 可自助
+  chatgpt.js        ← fallback   custom-2.json  ← 即时
+  minimax.js        ← 优化过
+      ↓                              ↓
+  开箱即用                      用户自助添加，无需等待
+```
+
+内置 parser 保留 — 它们更精确、有多层 fallback selector、经过验证。LLM 分析让用户不必等我们支持就能接入新 provider。
+
 ## 运行时防御：页面变更应对
 
 三层 fallback 机制：
