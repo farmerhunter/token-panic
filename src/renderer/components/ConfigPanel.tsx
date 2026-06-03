@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { ConfigData } from '@shared/types';
+import { CONFIGURABLE_PROVIDER_METAS } from '@shared/provider-metadata';
 
 interface Props {
   onBack: () => void;
@@ -16,24 +17,15 @@ export function ConfigPanel({ onBack, onSaved }: Props) {
       </div>
 
       <div style={styles.scrollContent}>
-        <ApiKeySection
-          providerId="deepseek"
-          label="DeepSeek API Key"
-          hint="在 DeepSeek 平台「API Keys」页面创建。密钥保存在本地，不会上传。"
-          onSaved={onSaved}
-        />
-        <ApiKeySection
-          providerId="kimi"
-          label="Kimi (Moonshot) API Key"
-          hint="在 platform.moonshot.cn 控制台创建 API key。使用中国区 API (api.moonshot.cn)。密钥保存在本地，不会上传。"
-          onSaved={onSaved}
-        />
-        <ApiKeySection
-          providerId="openai_platform"
-          label="OpenAI Platform API Key"
-          hint="需要 organization admin API key（非普通 secret key）。在 platform.openai.com → Settings → Organization → API keys 创建。"
-          onSaved={onSaved}
-        />
+        {CONFIGURABLE_PROVIDER_METAS.map((meta) => (
+          <ApiKeySection
+            key={meta.provider_id}
+            providerId={meta.provider_id}
+            label={meta.credential_label!}
+            hint={meta.credential_hint!}
+            onSaved={onSaved}
+          />
+        ))}
       </div>
     </div>
   );

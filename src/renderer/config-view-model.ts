@@ -1,9 +1,10 @@
 import type { ProviderSource, QuotaModel } from '@shared/types';
+import { ALL_PROVIDER_METAS } from '@shared/provider-metadata';
 
 export type ProviderConfigActionId =
   | 'edit_api_key'
-  | 'manual_input'
-  | 'quick_capture';
+  | 'quick_capture_chatgpt'
+  | 'manual_input_chatgpt';
 
 export type CredentialStatus = 'configured' | 'missing' | 'not_required';
 
@@ -27,42 +28,22 @@ export function toConfigViewModel(inputs: {
   openaiCredentialStatus: CredentialStatus;
   kimiCredentialStatus: CredentialStatus;
 }): ProviderConfigVM[] {
-  return [
-    {
-      provider_id: 'deepseek',
-      display_name: 'DeepSeek',
-      source: 'official_api',
-      quota_model: 'balance',
-      credential_status: inputs.deepseekCredentialStatus,
-      hint: '在 DeepSeek 平台「API Keys」页面创建。密钥保存在本地，不会上传。',
-      actions: ['edit_api_key'],
-    },
-    {
-      provider_id: 'kimi',
-      display_name: 'Kimi',
-      source: 'official_api',
-      quota_model: 'balance',
-      credential_status: inputs.kimiCredentialStatus,
-      hint: '需要 Moonshot/Kimi API key。在 platform.moonshot.cn 控制台创建。使用中国区 API (api.moonshot.cn)。密钥保存在本地，不会上传。',
-      actions: ['edit_api_key'],
-    },
-    {
-      provider_id: 'openai_platform',
-      display_name: 'OpenAI Platform',
-      source: 'official_api',
-      quota_model: 'cost',
-      credential_status: inputs.openaiCredentialStatus,
-      hint: '需要 organization admin API key（非普通 secret key）。在 platform.openai.com → Settings → Organization → API keys 创建。',
-      actions: ['edit_api_key'],
-    },
-    {
-      provider_id: 'chatgpt',
-      display_name: 'ChatGPT / Codex',
-      source: 'manual',
-      quota_model: 'limit',
-      credential_status: 'not_required',
-      hint: '通过 Safari 自动读取或手动输入限额数据。不需要 API key。',
-      actions: ['quick_capture', 'manual_input'],
-    },
-  ];
+  const statusMap: Record<string, CredentialStatus> = {
+    deepseek: inputs.deepseekCredentialStatus,
+    kimi: inputs.kimiCredentialStatus,
+    openai_platform: inputs.openaiCredentialStatus,
+    chatgpt: 'not_required',
+  };
+
+  return ALL_PROVIDER_METAS.map((meta) => ({
+    provider_id: meta.provider_id,
+    display_name: meta.display_name,
+    source: meta.source,
+    quota_model: meta.quota_model,
+    credential_status: statusMap[meta.provider_id] || 'not_required',
+    hint: meta.credential_hint || '',
+    actions: meta.configurable
+      ? ['edit_api_key' as const]
+      : (meta.manual_action_ids as ProviderConfigActionId[]) || [],
+  }));
 }

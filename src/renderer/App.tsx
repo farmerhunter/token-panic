@@ -31,7 +31,7 @@ export function App() {
   const { summary: deepseekSummary, loading, refresh } = useSnapshot('deepseek');
   const { summary: chatgptSummary } = useSnapshot('chatgpt', CHATGPT_EMPTY);
   const { summary: openaiSummary, loading: openaiLoading, refresh: refreshOpenAI } = useSnapshot('openai_platform');
-  const { summary: kimiSummary, loading: kimiLoading } = useSnapshot('kimi');
+  const { summary: kimiSummary, loading: kimiLoading, refresh: refreshKimi } = useSnapshot('kimi');
   const [view, setView] = useState<View>({ page: 'dashboard' });
 
   // ---- Navigation helpers ----
@@ -65,12 +65,18 @@ export function App() {
       return (
         <ConfigPanel
           onBack={goDashboard}
-          onSaved={() => { goDashboard(); refresh(); }}
+          onSaved={goDashboard}
         />
       );
 
     // --- Dashboard: main view ---
     case 'dashboard': {
+      const refreshHandlers: Record<string, () => void> = {
+        refresh_deepseek: refresh,
+        refresh_kimi: refreshKimi,
+        refresh_openai_platform: refreshOpenAI,
+      };
+
       const dashboard = toDashboardViewModel({
         deepseekSummary,
         deepseekLoading: loading,
@@ -101,7 +107,11 @@ export function App() {
               <div style={styles.sectionTitle}>余额型</div>
               {dashboard.balanceProviders.map((bp) => (
                 <div key={bp.provider_id} style={{ marginBottom: bp.provider_id !== dashboard.balanceProviders[dashboard.balanceProviders.length - 1].provider_id ? 8 : 0 }}>
-                  <BalancePanel summary={bp.summary} loading={bp.loading} />
+                  <BalancePanel
+                    summary={bp.summary}
+                    loading={bp.loading}
+                    onRefresh={bp.actions.length > 0 ? refreshHandlers[bp.actions[0]] : undefined}
+                  />
                 </div>
               ))}
             </div>
@@ -140,6 +150,7 @@ export function App() {
               <BalancePanel
                 summary={dashboard.costProvider.summary}
                 loading={dashboard.costProvider.loading}
+                onRefresh={dashboard.costProvider.actions.length > 0 ? refreshHandlers[dashboard.costProvider.actions[0]] : undefined}
               />
             </div>
           </div>

@@ -155,3 +155,21 @@ dashboard -> manual-input -> 返回 -> dashboard
 - UI component framework：现阶段问题主要是交互状态和信息架构，不是组件库能力不足。
 
 如果后续出现跨窗口导航、复杂异步取消、批量 provider 管理、undo/redo 或多步骤 wizard，再重新评估这些框架。
+
+## 当前 Provider 分组（Phase 5 baseline）
+
+Dashboard 按 `quota_model` 分三组，由 `toDashboardViewModel()` 输出：
+
+| 分组 | Provider | quota_model | refresh action | 单卡刷新 |
+|------|----------|-------------|----------------|----------|
+| 余额型 | DeepSeek | balance | refresh_deepseek | ✅ BalancePanel onRefresh |
+| 余额型 | Kimi | balance | refresh_kimi | ✅ BalancePanel onRefresh |
+| 费用/用量 | OpenAI Platform | cost | refresh_openai_platform | ✅ BalancePanel onRefresh |
+| 限额型 | ChatGPT/Codex | limit | — | Safari 更新 / 手动修改 |
+
+**Action 实现**：
+- 余额型和费用型 provider 各自通过 BalancePanel 的 `onRefresh` 触发 `useSnapshot(providerId).refresh` → `triggerRefresh(providerId)` → scheduler
+- ChatGPT 保持独立的 `quick_capture_chatgpt`（Safari 读取）和 `manual_input_chatgpt`（手动修改）
+- 所有 action ID 定义在 `DashboardActionId` union type 中，由 `provider-metadata.ts` 的 `refresh_action_id` / `manual_action_ids` 提供
+
+**Provider metadata 来源**：`src/shared/provider-metadata.ts`（DD-028）。ConfigPanel 和 ViewModel 不硬编码 provider 字符串。

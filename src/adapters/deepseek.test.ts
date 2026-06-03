@@ -61,6 +61,7 @@ describe('deepseekAdapter', () => {
     const result = await deepseekAdapter.fetchSnapshot({ apiKey: 'sk-bad' });
     expect(result.snapshot).toBeNull();
     expect(result.error?.status).toBe('auth_required');
+    expect(result.error?.reason).toContain('DeepSeek');
   });
 
   it('should return auth_required on HTTP 403', async () => {

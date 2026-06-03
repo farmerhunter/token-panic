@@ -1,4 +1,5 @@
 import type { ProviderAdapter, AdapterContext, FetchResult } from '../shared/types';
+import { KIMI_META } from '../shared/provider-metadata';
 import { createSnapshot, createBalancePayload } from '../domain/normalize';
 
 const KIMI_BALANCE_URL = 'https://api.moonshot.cn/v1/users/me/balance';
@@ -16,8 +17,8 @@ interface KimiBalanceResponse {
 }
 
 export const kimiAdapter: ProviderAdapter = {
-  id: 'kimi',
-  name: 'Kimi',
+  id: KIMI_META.provider_id,
+  name: KIMI_META.display_name,
   source: 'official_api',
   quota_model: 'balance',
   refresh_interval_min: 60,

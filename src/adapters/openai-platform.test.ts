@@ -66,6 +66,7 @@ describe('openaiPlatformAdapter', () => {
 
     const result = await openaiPlatformAdapter.fetchSnapshot({ apiKey: 'sk-bad' });
     expect(result.error?.status).toBe('auth_required');
+    expect(result.error?.reason).toContain('OpenAI Platform');
   });
 
   it('should return error on HTTP 500', async () => {

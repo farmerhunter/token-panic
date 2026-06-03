@@ -4,9 +4,10 @@ import type { ProviderSummary } from '@shared/types';
 interface Props {
   summary: ProviderSummary | null;
   loading: boolean;
+  onRefresh?: () => void;
 }
 
-export function BalancePanel({ summary, loading }: Props) {
+export function BalancePanel({ summary, loading, onRefresh }: Props) {
   if (loading && !summary) {
     return (
       <div style={styles.card}>
@@ -57,8 +58,11 @@ export function BalancePanel({ summary, loading }: Props) {
         </div>
       )}
 
-      <div style={styles.fetchTime}>
-        {formatTimeAgo(summary.last_fetch)}
+      <div style={styles.footerRow}>
+        <span style={styles.fetchTime}>{formatTimeAgo(summary.last_fetch)}</span>
+        {onRefresh && (
+          <button style={styles.refreshLink} onClick={onRefresh}>刷新</button>
+        )}
       </div>
     </div>
   );
@@ -159,9 +163,22 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 12,
     color: '#86868b',
   },
+  footerRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   fetchTime: {
     fontSize: 11,
     color: '#aeaeb2',
+  },
+  refreshLink: {
+    background: 'none',
+    border: 'none',
+    fontSize: 11,
+    color: '#007aff',
+    cursor: 'pointer',
+    padding: 0,
   },
   remainingRow: {
     display: 'flex',

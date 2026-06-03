@@ -1,5 +1,6 @@
 import type { ProviderAdapter, AdapterContext, FetchResult } from '../shared/types';
 import type { CostPayload } from '../shared/types';
+import { OPENAI_PLATFORM_META } from '../shared/provider-metadata';
 import { createSnapshot } from '../domain/normalize';
 
 const OPENAI_COSTS_URL = 'https://api.openai.com/v1/organization/costs';
@@ -22,8 +23,8 @@ interface CostsResponse {
 }
 
 export const openaiPlatformAdapter: ProviderAdapter = {
-  id: 'openai_platform',
-  name: 'OpenAI Platform',
+  id: OPENAI_PLATFORM_META.provider_id,
+  name: OPENAI_PLATFORM_META.display_name,
   source: 'official_api',
   quota_model: 'cost',
   refresh_interval_min: 60, // once per hour — costs don't change that fast
@@ -77,7 +78,7 @@ export const openaiPlatformAdapter: ProviderAdapter = {
         snapshot: null,
         error: {
           status: 'auth_required',
-          reason: `Authentication failed (HTTP ${response.status})`,
+          reason: `OpenAI Platform API key 认证失败 (HTTP ${response.status})。请确认使用的是 organization admin key（非普通 secret key，非 ChatGPT 订阅）。`,
         },
       };
     }

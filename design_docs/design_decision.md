@@ -557,3 +557,55 @@ UI 对 `manual_required` 的展示："点击设置 → 录入 ChatGPT 限额数�
 **决策**：`balanceProvider: ProviderCardVM` 改为 `balanceProviders: ProviderCardVM[]`。`costProvider` 和 `limitProvider` 暂保持单字段（各只有一个 provider）。后续第三个余额型 provider 接入时零成本扩展。
 
 **理由**：渐进式数组化——只在有实际多 provider 需求的 section 做数组，不做全局 `groups[]` 大重构。控制改动范围，降低 ViewModel 渲染层 bug 风险。
+
+---
+
+### DD-028：Provider static metadata as shared UI/config contract
+
+**问题**：provider_id、display_name、credential hint、refresh action 等字符串散落在 adapter、config-view-model、dashboard-view-model、ConfigPanel 等 12 个文件中。加新 provider 时容易遗漏或拼写不一致。
+
+**决策**：新增 `src/shared/provider-metadata.ts` 作为 provider 静态产品契约的单一数据源。包含 `ProviderMeta` 接口：provider_id、display_name、source、quota_model、dashboard_group、credential_label/hint、refresh_action_id、manual_action_ids。`ALL_PROVIDER_METAS` 数组供 ViewModel 循环使用。
+
+**消费者**：
+- ConfigPanel：`CONFIGURABLE_PROVIDER_METAS.map()` 生成 API key section
+- config-view-model：`ALL_PROVIDER_METAS.map()` 生成配置项
+- dashboard-view-model：引用 metadata 常量替代硬编码 provider_id/action 字符串
+- adapters：引用 metadata 的 `provider_id` / `display_name`
+
+**理由**：不是 registry 框架，只是静态数据收敛。不需要 scheduler/IPC 改动。加新 provider 时只需在 metadata 里加一条记录，adapter + ViewModel 自动继承。
+
+**风险**：`ProviderId` 类型需要手动与 metadata 保持同步。当前只有 4 个 provider，维护成本可控。
+
+---
+
+## 阶段 6：Packaging & Distribution
+
+### DD-029：Packaging MVP with electron-builder
+
+**问题**：当前只有开发态启动（`electron .`），需要打包成可安装的 macOS app。
+
+**决策**：使用 `electron-builder`，`asar: false`，先跑通 dir/dmg 本地打包。不在此阶段做 notarization / signing / auto update。
+
+**理由**：
+- electron-builder 配置简单，一步生成 .app + .dmg
+- `asar: false` 避免 renderer HTML 路径解析问题（`__dirname` 在 asar 内指向不同路径）
+- notarization 需要 Apple Developer ID + 证书，是独立的发布工程问题，不应和打包混在一起
+- auto update 需要签名 + 更新 feed 服务器，同样后置
+
+**配置**：`electron-builder.yml`，`appId: com.farmerhunter.token-panic`，`productName: token-panic`。renderer 加载改用 `app.isPackaged` 替代 `process.env.NODE_ENV`。
+
+**后置项**：
+- Phase 6B：Login item / startup
+- Phase 6C：Code signing / notarization
+- Phase 7：Auto update
+
+**后续约束**：
+- `asar: false` 当前阶段保持，后续启用 asar + asarUnpack 以减小 bundle 并保护源码
+- Playwright 已从 dependencies 移除（仅 Phase 3 实验使用，无代码引用），后续若需要 browser automation 需重新评估
+- `build:main` 已加 `rm -rf dist/main` clean step，确保测试文件不进 packaged app
+- electron-builder files 排除 `*.map`、`*.test.js`、`*.test.d.ts`
+- 默认 Electron icon，后续 branding 阶段替换
+
+**风险**：
+- macOS Automation 权限在 packaged app 下可能需要重新授权（bundle ID 变更）
+- ad-hoc signing 无法通过 Gatekeeper，需用户手动允许

@@ -17,7 +17,7 @@ export function StatusBar({ summary, loading }: Props) {
     text = '无数据';
     color = '#c62828';
   } else if (summary.status === 'ok') {
-    text = `DeepSeek 数据正常`;
+    text = '数据正常';
     color = '#2e7d32';
   } else if (summary.status === 'auth_required') {
     text = '需要配置 API Key — 点击设置';

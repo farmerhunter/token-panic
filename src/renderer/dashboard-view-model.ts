@@ -1,4 +1,5 @@
 import type { ProviderSummary } from '@shared/types';
+import { DEEPSEEK_META, KIMI_META, OPENAI_PLATFORM_META } from '@shared/provider-metadata';
 
 export type DashboardActionId =
   | 'refresh_deepseek'
@@ -52,25 +53,26 @@ export function toDashboardViewModel(input: {
 }): DashboardViewModel {
   return {
     headerActions: ['refresh_deepseek', 'open_settings'],
+    // refresh_action_id is always set for official_api providers (see provider-metadata)
     balanceProviders: [
       {
-        provider_id: 'deepseek',
+        provider_id: DEEPSEEK_META.provider_id,
         summary: input.deepseekSummary,
         loading: input.deepseekLoading,
-        actions: ['refresh_deepseek'],
+        actions: [DEEPSEEK_META.refresh_action_id!],
       },
       {
-        provider_id: 'kimi',
+        provider_id: KIMI_META.provider_id,
         summary: input.kimiSummary,
         loading: input.kimiLoading,
-        actions: ['refresh_kimi'],
+        actions: [KIMI_META.refresh_action_id!],
       },
     ],
     costProvider: {
-      provider_id: 'openai_platform',
+      provider_id: OPENAI_PLATFORM_META.provider_id,
       summary: input.openaiSummary,
       loading: input.openaiLoading,
-      actions: ['refresh_openai_platform'],
+      actions: [OPENAI_PLATFORM_META.refresh_action_id!],
     },
     limitProvider: toChatGptLimitCard(input.chatgptSummary),
   };

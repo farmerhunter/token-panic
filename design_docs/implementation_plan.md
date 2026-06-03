@@ -419,9 +419,29 @@ debug-bundle-<trace_id>/
 
 ---
 
-## 阶段 5：Multi-provider —— 全量接入
+## 阶段 5：Multi-provider —— 多 provider baseline ✅
 
-（下一主线）
+（completed — 4 provider stabilized）
+
+## 阶段 6A：macOS Packaging MVP ✅
+
+使用 electron-builder `asar: false` 打包成可安装的 macOS app（231MB，其中 Electron framework ~226MB）。
+
+已交付：
+- `electron-builder.yml`：`appId: com.farmerhunter.token-panic`，`productName: token-panic`
+- tray.ts renderer 加载改用 `app.isPackaged` + 修正 loadFile 路径（`../../renderer/`）
+- `package:dir` / `package:mac` scripts
+- `build:main` 增加 `rm -rf dist/main` 确保 clean build
+- DD-029：打包决策
+- tsconfig.main.json exclude `**/*.test.ts`
+- Playwright 已从 dependencies 移除（无代码引用）
+- electron-builder files 显式排除 `*.map`、`*.test.js`、`*.test.d.ts`
+
+后置：asar 启用、login item、signing/notarization
+
+## 阶段 6B：Login Item / Startup（后置）
+## 阶段 6C：Code Signing / Notarization（后置）
+## 阶段 7：Auto Update（后置）
 
 ### 前置原则
 

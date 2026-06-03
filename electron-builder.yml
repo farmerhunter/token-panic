@@ -1,0 +1,17 @@
+appId: com.farmerhunter.token-panic
+productName: token-panic
+directories:
+  output: release
+files:
+  - dist/**/*
+  - package.json
+  - '!dist/**/*.map'
+  - '!dist/**/*.test.js'
+  - '!dist/**/*.test.d.ts'
+mac:
+  category: public.app-category.utilities
+  target:
+    - dmg
+    - dir
+# asar: false for MVP — verify paths first, enable asar in Phase 6B
+asar: false

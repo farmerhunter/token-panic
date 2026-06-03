@@ -1,4 +1,4 @@
-import { Tray, BrowserWindow, nativeImage, screen } from 'electron';
+import { Tray, BrowserWindow, nativeImage, screen, app } from 'electron';
 import type { NativeImage } from 'electron';
 import * as path from 'path';
 
@@ -83,12 +83,13 @@ export function createTray(): TrayHandle {
   });
 
   // Load renderer
-  if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
+  if (!app.isPackaged) {
     // Dev: load from Vite dev server
     panelWindow.loadURL('http://localhost:5173');
   } else {
-    // Production: load built files
-    panelWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
+    // Packaged: load built HTML from app resources
+    // __dirname is dist/main/main/ in dev, or the packaged app's asar root
+    panelWindow.loadFile(path.join(__dirname, '../../renderer/index.html'));
   }
 
   // Toggle panel on tray click

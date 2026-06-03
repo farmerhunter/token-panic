@@ -1,4 +1,5 @@
 import type { ProviderAdapter, AdapterContext, FetchResult } from '../shared/types';
+import { DEEPSEEK_META } from '../shared/provider-metadata';
 import { createSnapshot, createBalancePayload } from '../domain/normalize';
 
 const DEEPSEEK_BALANCE_URL = 'https://api.deepseek.com/user/balance';
@@ -49,8 +50,8 @@ function parseBalanceResponse(
 }
 
 export const deepseekAdapter: ProviderAdapter = {
-  id: 'deepseek',
-  name: 'DeepSeek',
+  id: DEEPSEEK_META.provider_id,
+  name: DEEPSEEK_META.display_name,
   source: 'official_api',
   quota_model: 'balance',
   refresh_interval_min: 30,
@@ -99,7 +100,7 @@ export const deepseekAdapter: ProviderAdapter = {
         snapshot: null,
         error: {
           status: 'auth_required',
-          reason: `Authentication failed (HTTP ${response.status})`,
+          reason: `DeepSeek API key 认证失败 (HTTP ${response.status})。请检查 key 是否正确。`,
         },
       };
     }

@@ -30,8 +30,8 @@ describe('toConfigViewModel', () => {
   it('should expose quick_capture and manual_input for ChatGPT', () => {
     const vms = toConfigViewModel(defaultInput);
     const cg = vms.find((v) => v.provider_id === 'chatgpt')!;
-    expect(cg.actions).toContain('quick_capture');
-    expect(cg.actions).toContain('manual_input');
+    expect(cg.actions).toContain('quick_capture_chatgpt');
+    expect(cg.actions).toContain('manual_input_chatgpt');
     expect(cg.credential_status).toBe('not_required');
   });
 
@@ -39,9 +39,11 @@ describe('toConfigViewModel', () => {
     const vms = toConfigViewModel({
       deepseekCredentialStatus: 'missing',
       openaiCredentialStatus: 'configured',
+      kimiCredentialStatus: 'missing',
     });
     expect(vms.find((v) => v.provider_id === 'deepseek')!.credential_status).toBe('missing');
     expect(vms.find((v) => v.provider_id === 'openai_platform')!.credential_status).toBe('configured');
+    expect(vms.find((v) => v.provider_id === 'kimi')!.credential_status).toBe('missing');
   });
 
   it('should not include disable/enable actions (deferred to later phase)', () => {
