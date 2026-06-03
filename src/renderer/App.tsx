@@ -31,6 +31,7 @@ export function App() {
   const { summary: deepseekSummary, loading, refresh } = useSnapshot('deepseek');
   const { summary: chatgptSummary } = useSnapshot('chatgpt', CHATGPT_EMPTY);
   const { summary: openaiSummary, loading: openaiLoading, refresh: refreshOpenAI } = useSnapshot('openai_platform');
+  const { summary: kimiSummary, loading: kimiLoading } = useSnapshot('kimi');
   const [view, setView] = useState<View>({ page: 'dashboard' });
 
   // ---- Navigation helpers ----
@@ -73,6 +74,8 @@ export function App() {
       const dashboard = toDashboardViewModel({
         deepseekSummary,
         deepseekLoading: loading,
+        kimiSummary,
+        kimiLoading,
         openaiSummary,
         openaiLoading,
         chatgptSummary,
@@ -96,10 +99,11 @@ export function App() {
             {/* Balance providers */}
             <div style={styles.section}>
               <div style={styles.sectionTitle}>余额型</div>
-              <BalancePanel
-                summary={dashboard.balanceProvider.summary}
-                loading={dashboard.balanceProvider.loading}
-              />
+              {dashboard.balanceProviders.map((bp) => (
+                <div key={bp.provider_id} style={{ marginBottom: bp.provider_id !== dashboard.balanceProviders[dashboard.balanceProviders.length - 1].provider_id ? 8 : 0 }}>
+                  <BalancePanel summary={bp.summary} loading={bp.loading} />
+                </div>
+              ))}
             </div>
 
             {/* Limit providers */}

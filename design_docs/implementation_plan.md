@@ -432,10 +432,11 @@ debug-bundle-<trace_id>/
 
 ### 增量目标
 
-- 接入 OpenAI Platform（official_api + usage/cost）
-- 接入 MiniMax（official_api + balance）
-- 多 provider 配置面板（启用/禁用、刷新间隔）
-- 按 quota_model 分组展示（余额型 / 限额型 / 用量费用型）
+- OpenAI Platform（official_api + cost）— 已实现
+- Kimi / Moonshot（official_api + balance）— 已实现
+- MiniMax（official_api + balance）— deferred，等待 API 文档验证
+- 多 provider 配置面板（ApiKeySection 组件 × 3）+ config-view-model.ts 契约
+- 按 quota_model 分组展示（余额型 / 限额型 / 用量费用型），balanceProviders 数组化
 - 复用阶段 4.5 的 dashboard ViewModel，不在 JSX 中新增散落的 provider-specific action 判断
 - 新 provider 的 failure state、diagnostics 和 user-facing action 必须先进入 provider summary / interaction contract
 

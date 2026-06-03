@@ -23,6 +23,12 @@ export function ConfigPanel({ onBack, onSaved }: Props) {
           onSaved={onSaved}
         />
         <ApiKeySection
+          providerId="kimi"
+          label="Kimi (Moonshot) API Key"
+          hint="在 platform.moonshot.cn 控制台创建 API key。使用中国区 API (api.moonshot.cn)。密钥保存在本地，不会上传。"
+          onSaved={onSaved}
+        />
+        <ApiKeySection
           providerId="openai_platform"
           label="OpenAI Platform API Key"
           hint="需要 organization admin API key（非普通 secret key）。在 platform.openai.com → Settings → Organization → API keys 创建。"

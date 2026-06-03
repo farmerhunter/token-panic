@@ -5,13 +5,15 @@ describe('toConfigViewModel', () => {
   const defaultInput = {
     deepseekCredentialStatus: 'configured' as const,
     openaiCredentialStatus: 'missing' as const,
+    kimiCredentialStatus: 'missing' as const,
   };
 
-  it('should include all three known providers', () => {
+  it('should include all four known providers', () => {
     const vms = toConfigViewModel(defaultInput);
-    expect(vms).toHaveLength(3);
+    expect(vms).toHaveLength(4);
     expect(vms.map((v) => v.provider_id)).toEqual([
       'deepseek',
+      'kimi',
       'openai_platform',
       'chatgpt',
     ]);

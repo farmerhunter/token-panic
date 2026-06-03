@@ -25,6 +25,7 @@ export interface ProviderConfigVM {
 export function toConfigViewModel(inputs: {
   deepseekCredentialStatus: CredentialStatus;
   openaiCredentialStatus: CredentialStatus;
+  kimiCredentialStatus: CredentialStatus;
 }): ProviderConfigVM[] {
   return [
     {
@@ -34,6 +35,15 @@ export function toConfigViewModel(inputs: {
       quota_model: 'balance',
       credential_status: inputs.deepseekCredentialStatus,
       hint: '在 DeepSeek 平台「API Keys」页面创建。密钥保存在本地，不会上传。',
+      actions: ['edit_api_key'],
+    },
+    {
+      provider_id: 'kimi',
+      display_name: 'Kimi',
+      source: 'official_api',
+      quota_model: 'balance',
+      credential_status: inputs.kimiCredentialStatus,
+      hint: '需要 Moonshot/Kimi API key。在 platform.moonshot.cn 控制台创建。使用中国区 API (api.moonshot.cn)。密钥保存在本地，不会上传。',
       actions: ['edit_api_key'],
     },
     {

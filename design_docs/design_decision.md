@@ -515,3 +515,45 @@ UI 对 `manual_required` 的展示："点击设置 → 录入 ChatGPT 限额数�
 - 引入 React Router：暂缓。应用是小型 Electron panel，不存在复杂 URL、深链或浏览器历史需求。
 - 引入 Zustand/Redux：暂缓。全局状态暂时没有复杂写入竞争，provider hook + ViewModel 已覆盖当前需求。
 - 引入 XState：暂缓。若后续 capture 出现并发取消、重试队列、多步骤 wizard 或跨窗口状态同步，再重新评估。
+
+---
+
+### DD-026：Kimi 使用官方 balance API 接入
+
+**问题**：Phase 5 是否可以接入 Kimi / Moonshot，使用什么 quota model？
+
+**决策**：Kimi 使用 official API `GET https://api.moonshot.cn/v1/users/me/balance`（中国区 endpoint），`source = official_api`，`quota_model = balance`。provider_id 使用 `kimi`，display name 使用 `Kimi`。
+
+**理由**：
+- 官方 API 提供结构化余额数据（`available_balance`、`voucher_balance`、`cash_balance`）
+- 不需要 browser scrape
+- 与 DeepSeek 同属余额型，可复用 BalancePanel 和 balance summary
+- API key 是普通 Moonshot/Kimi API key，非 admin key
+
+**币种假设**：Moonshot/Kimi 平台以人民币计费，但 balance API response 没有显式 `currency` 字段。当前假设为 CNY，UI 显示 `¥` 前缀。此假设写入本 DD，若后续发现实际币种不同，修改 adapter 的 currency 字段即可。
+
+**风险**：
+- API 返回示例里 `code` 字段示例值为 `123`，但字段说明写 `0 indicates success`。实现以 `status === true` 且 `code === 0` 为成功条件，并加测试覆盖 code != 0 的情况
+- `available_balance` 是浮点数，需处理精度（保留两位小数）
+
+### Provider Candidate 审查：Kimi / Moonshot
+
+| 问题 | 回答 |
+|------|------|
+| provider_id | `kimi` |
+| source | `official_api` |
+| quota_model | `balance` |
+| 是否可主动 refresh | ✅ scheduler，建议 60min 间隔 |
+| credential 形态 | Moonshot/Kimi API key，普通 secret key，通过 `CredentialStore` 管理 |
+| 成功 snapshot payload | `BalancePayload { remaining_amount: available_balance, currency: "CNY" }` |
+| 失败状态 | `auth_required`（401/403）、`error`（网络错误、超时、code != 0、missing data） |
+| UI action | `refresh_kimi`（刷新余额）|
+| diagnostics 需求 | 无特殊需求，API 返回结构化 JSON |
+
+### DD-027：Dashboard ViewModel balanceProviders 数组化
+
+**问题**：加 Kimi 后有两个余额型 provider（DeepSeek + Kimi）。当前 ViewModel 只有单个 `balanceProvider` 字段，需要数组化。
+
+**决策**：`balanceProvider: ProviderCardVM` 改为 `balanceProviders: ProviderCardVM[]`。`costProvider` 和 `limitProvider` 暂保持单字段（各只有一个 provider）。后续第三个余额型 provider 接入时零成本扩展。
+
+**理由**：渐进式数组化——只在有实际多 provider 需求的 section 做数组，不做全局 `groups[]` 大重构。控制改动范围，降低 ViewModel 渲染层 bug 风险。
