@@ -1,9 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { ProviderSummary } from '@shared/types';
 
-export function useSnapshot() {
-  const [summary, setSummary] = useState<ProviderSummary | null>(null);
-  const [loading, setLoading] = useState(true);
+export function useProviderSummary(
+  providerId: string,
+  initialSummary: ProviderSummary | null = null,
+) {
+  const [summary, setSummary] = useState<ProviderSummary | null>(initialSummary);
+  const [loading, setLoading] = useState(initialSummary === null);
 
   useEffect(() => {
     const api = window.electronAPI;
@@ -13,26 +16,40 @@ export function useSnapshot() {
       return;
     }
 
-    // Listen for push updates
-    api.onSnapshotUpdated((newSummary) => {
-      setSummary(newSummary);
-      setLoading(false);
+    const unsub1 = api.onSnapshotUpdated((s) => {
+      if (s.provider_id === providerId) {
+        setSummary(s);
+        setLoading(false);
+      }
     });
 
-    // Listen for reply to our request
-    api.onSnapshotReply((newSummary) => {
-      setSummary(newSummary);
-      setLoading(false);
+    const unsub2 = api.onSnapshotReply((s) => {
+      if (s.provider_id === providerId) {
+        setSummary(s);
+        setLoading(false);
+      }
     });
 
     // Request current snapshot on mount
     api.requestSnapshot();
-  }, []);
+
+    return () => {
+      unsub1();
+      unsub2();
+    };
+  }, [providerId]);
 
   const refresh = useCallback(() => {
     setLoading(true);
-    window.electronAPI?.triggerRefresh('deepseek');
-  }, []);
+    window.electronAPI?.triggerRefresh(providerId);
+  }, [providerId]);
 
   return { summary, loading, refresh };
+}
+
+export function useSnapshot(
+  providerId: string,
+  initialSummary: ProviderSummary | null = null,
+) {
+  return useProviderSummary(providerId, initialSummary);
 }

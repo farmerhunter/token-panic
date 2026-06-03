@@ -20,6 +20,7 @@ export interface SnapshotParams {
   status?: ProviderStatus;
   status_reason?: string;
   plan?: string;
+  capture_method?: string;
 }
 
 export function createSnapshot(params: SnapshotParams): ProviderSnapshot {
@@ -32,6 +33,7 @@ export function createSnapshot(params: SnapshotParams): ProviderSnapshot {
     status: params.status ?? 'ok',
     status_reason: params.status_reason,
     plan: params.plan,
+    capture_method: params.capture_method,
     payload: params.payload,
   };
 }
@@ -77,7 +79,7 @@ export function validateSnapshot(snapshot: ProviderSnapshot): string | null {
   if (!snapshot.captured_at || isNaN(Date.parse(snapshot.captured_at))) {
     return 'captured_at must be a valid ISO 8601 date string';
   }
-  if (!['ok', 'stale', 'error', 'auth_required', 'disabled'].includes(snapshot.status)) {
+  if (!['ok', 'stale', 'error', 'auth_required', 'manual_required', 'disabled'].includes(snapshot.status)) {
     return `invalid status: ${snapshot.status}`;
   }
   if (!snapshot.payload || typeof snapshot.payload !== 'object') {
@@ -133,4 +135,63 @@ export function validateSnapshot(snapshot: ProviderSnapshot): string | null {
   }
 
   return null; // valid
+}
+
+// ---- Manual limit snapshot (Phase 3) ----
+
+export interface ManualLimitInput {
+  provider_id: string;
+  provider_name: string;
+  plan?: string;
+  capture_method?: string;
+  limits: Array<{
+    window: string;
+    used: number;
+    total: number;
+    unit: string;
+    remaining?: number;
+    resets_at?: string;
+  }>;
+}
+
+/**
+ * Create a ProviderSnapshot from user-entered manual limit data.
+ * Used by the manual-snapshot:update IPC handler — does not go through adapter/scheduler.
+ * See DD-016.
+ */
+export function createManualLimitSnapshot(input: ManualLimitInput): ProviderSnapshot {
+  // Validate used <= total for each limit
+  for (const limit of input.limits) {
+    if (limit.used > limit.total) {
+      throw new Error(
+        `Invalid limit: used (${limit.used}) exceeds total (${limit.total}) for window "${limit.window}"`,
+      );
+    }
+    if (limit.used < 0 || limit.total <= 0) {
+      throw new Error(
+        `Invalid limit values for window "${limit.window}": used=${limit.used}, total=${limit.total}`,
+      );
+    }
+  }
+
+  const payload: LimitPayload = {
+    limits: input.limits.map((l) => ({
+      window: l.window,
+      used: l.used,
+      total: l.total,
+      unit: l.unit,
+      remaining: l.remaining,
+      resets_at: l.resets_at,
+    })),
+  };
+
+  return createSnapshot({
+    provider_id: input.provider_id,
+    provider_name: input.provider_name,
+    source: 'manual',
+    quota_model: 'limit',
+    payload,
+    plan: input.plan,
+    capture_method: input.capture_method,
+  });
 }

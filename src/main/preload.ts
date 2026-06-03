@@ -1,5 +1,13 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
+type Unsubscribe = () => void;
+
+function on(channel: string, callback: (data: unknown) => void): Unsubscribe {
+  const listener = (_event: Electron.IpcRendererEvent, data: unknown) => callback(data);
+  ipcRenderer.on(channel, listener);
+  return () => ipcRenderer.removeListener(channel, listener);
+}
+
 /**
  * Safe API exposed to the renderer process via contextBridge.
  *
@@ -9,13 +17,13 @@ import { contextBridge, ipcRenderer } from 'electron';
 contextBridge.exposeInMainWorld('electronAPI', {
   // Snapshot
   onSnapshotUpdated: (callback: (summary: unknown) => void) => {
-    ipcRenderer.on('snapshot:updated', (_event, summary) => callback(summary));
+    return on('snapshot:updated', callback);
   },
   requestSnapshot: () => {
     ipcRenderer.send('snapshot:request');
   },
   onSnapshotReply: (callback: (summary: unknown) => void) => {
-    ipcRenderer.on('snapshot:reply', (_event, summary) => callback(summary));
+    return on('snapshot:reply', callback);
   },
 
   // Refresh
@@ -28,9 +36,59 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.send('config:get');
   },
   onConfigReply: (callback: (data: unknown) => void) => {
-    ipcRenderer.on('config:reply', (_event, data) => callback(data));
+    return on('config:reply', callback);
   },
   updateConfig: (providerId: string, apiKey: string) => {
     ipcRenderer.send('config:update', { provider_id: providerId, api_key: apiKey });
+  },
+
+  // Phase 3 — Manual snapshot
+  saveManualSnapshot: (input: unknown) => {
+    ipcRenderer.send('manual-snapshot:update', input);
+  },
+  onManualSnapshotSaved: (callback: (summary: unknown) => void) => {
+    return on('manual-snapshot:saved', callback);
+  },
+
+  // Phase 3 — Safari capture
+  findSafariTab: () => {
+    ipcRenderer.send('safari-capture:find');
+  },
+  onSafariTabFound: (callback: (tab: unknown) => void) => {
+    return on('safari-capture:tab-found', callback);
+  },
+  probeSafariJS: () => {
+    ipcRenderer.send('safari-capture:probe');
+  },
+  onSafariProbeResult: (callback: (result: unknown) => void) => {
+    return on('safari-capture:probe-result', callback);
+  },
+  readSafariTab: () => {
+    ipcRenderer.send('safari-capture:read');
+  },
+  onSafariTextRead: (callback: (result: unknown) => void) => {
+    return on('safari-capture:text-read', callback);
+  },
+  onSafariCaptureError: (callback: (error: unknown) => void) => {
+    return on('safari-capture:error', callback);
+  },
+
+  // Panel lifecycle
+  onPanelShown: (callback: () => void) => {
+    return on('panel:shown', callback);
+  },
+
+  // Diagnostics
+  recordParserDiagnostics: (data: unknown) => {
+    ipcRenderer.send('diagnostics:parser', data);
+  },
+  exportDebugBundle: (request: unknown) => {
+    ipcRenderer.send('diagnostics:export', request);
+  },
+  onDebugBundleExported: (callback: (result: unknown) => void) => {
+    return on('diagnostics:exported', callback);
+  },
+  revealDebugBundle: (bundlePath: string) => {
+    ipcRenderer.send('diagnostics:reveal', bundlePath);
   },
 });

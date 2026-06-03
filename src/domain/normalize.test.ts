@@ -142,4 +142,83 @@ describe('validateSnapshot', () => {
     const err = validateSnapshot(snapshot);
     expect(err).toContain('limit.used');
   });
+
+  it('should accept manual_required status', () => {
+    const snapshot = makeBalanceSnapshot();
+    const modified = { ...snapshot, status: 'manual_required' as const };
+    expect(validateSnapshot(modified)).toBeNull();
+  });
+});
+
+// ---- createManualLimitSnapshot (Phase 3) ----
+
+import { createManualLimitSnapshot } from './normalize';
+
+describe('createManualLimitSnapshot', () => {
+  it('should create a valid limit snapshot from manual input', () => {
+    const snapshot = createManualLimitSnapshot({
+      provider_id: 'chatgpt',
+      provider_name: 'ChatGPT',
+      plan: 'ChatGPT Plus',
+      limits: [
+        { window: '5h', used: 1_200_000, total: 2_000_000, unit: 'tokens' },
+        { window: 'week', used: 3_800_000, total: 10_000_000, unit: 'tokens' },
+      ],
+    });
+
+    expect(snapshot.provider_id).toBe('chatgpt');
+    expect(snapshot.source).toBe('manual');
+    expect(snapshot.quota_model).toBe('limit');
+    expect(snapshot.status).toBe('ok');
+    expect(snapshot.plan).toBe('ChatGPT Plus');
+
+    const payload = snapshot.payload as any;
+    expect(payload.limits).toHaveLength(2);
+    expect(payload.limits[0].window).toBe('5h');
+    expect(payload.limits[0].used).toBe(1_200_000);
+    expect(payload.limits[1].window).toBe('week');
+  });
+
+  it('should pass validateSnapshot', () => {
+    const snapshot = createManualLimitSnapshot({
+      provider_id: 'chatgpt',
+      provider_name: 'ChatGPT',
+      limits: [
+        { window: '5h', used: 100, total: 500, unit: 'messages' },
+      ],
+    });
+    expect(validateSnapshot(snapshot)).toBeNull();
+  });
+
+  it('should throw when used exceeds total', () => {
+    expect(() =>
+      createManualLimitSnapshot({
+        provider_id: 'chatgpt',
+        provider_name: 'ChatGPT',
+        limits: [{ window: '5h', used: 999, total: 100, unit: 'tokens' }],
+      }),
+    ).toThrow('exceeds total');
+  });
+
+  it('should throw on negative values', () => {
+    expect(() =>
+      createManualLimitSnapshot({
+        provider_id: 'chatgpt',
+        provider_name: 'ChatGPT',
+        limits: [{ window: '5h', used: -1, total: 100, unit: 'tokens' }],
+      }),
+    ).toThrow();
+  });
+
+  it('should include optional resets_at', () => {
+    const snapshot = createManualLimitSnapshot({
+      provider_id: 'chatgpt',
+      provider_name: 'ChatGPT',
+      limits: [
+        { window: '5h', used: 100, total: 500, unit: 'tokens', resets_at: '2026-06-02T14:00:00Z' },
+      ],
+    });
+    const payload = snapshot.payload as any;
+    expect(payload.limits[0].resets_at).toBe('2026-06-02T14:00:00Z');
+  });
 });

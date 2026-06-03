@@ -15,22 +15,26 @@ export function ConfigPanel({ onBack, onSaved }: Props) {
     const api = window.electronAPI;
     if (!api) return;
 
-    api.onConfigReply((data: ConfigData) => {
+    const unsubscribe = api.onConfigReply((data: ConfigData) => {
       setHasKey(data.has_key);
     });
 
     api.requestConfig();
+
+    return unsubscribe;
   }, []);
 
   const handleSave = async () => {
     setSaving(true);
-    window.electronAPI?.updateConfig('deepseek', apiKey.trim());
-    // The main process will trigger a refresh after saving;
-    // we give it a moment then call onSaved
-    setTimeout(() => {
+    const unsubscribe = window.electronAPI?.onSnapshotUpdated(() => {
+      unsubscribe?.();
       setSaving(false);
       onSaved();
-    }, 500);
+    });
+    setTimeout(() => {
+      if (unsubscribe) { unsubscribe(); setSaving(false); onSaved(); }
+    }, 8000);
+    window.electronAPI?.updateConfig('deepseek', apiKey.trim());
   };
 
   return (
@@ -43,7 +47,7 @@ export function ConfigPanel({ onBack, onSaved }: Props) {
         <span style={{ width: 50 }} />
       </div>
 
-      <div style={styles.content}>
+      <div style={styles.scrollContent}>
         <div style={styles.section}>
           <div style={styles.label}>DeepSeek API Key</div>
           <div style={styles.hint}>
@@ -59,18 +63,12 @@ export function ConfigPanel({ onBack, onSaved }: Props) {
               if (e.key === 'Enter' && apiKey.trim()) handleSave();
             }}
           />
+          {apiKey.trim() && (
+            <button style={styles.saveBtn} disabled={saving} onClick={handleSave}>
+              {saving ? '保存中…' : '保存并刷新'}
+            </button>
+          )}
         </div>
-
-        <button
-          style={{
-            ...styles.saveBtn,
-            opacity: apiKey.trim() ? 1 : 0.4,
-          }}
-          disabled={!apiKey.trim() || saving}
-          onClick={handleSave}
-        >
-          {saving ? '保存中…' : '保存并刷新'}
-        </button>
       </div>
     </div>
   );
@@ -104,13 +102,25 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     color: '#1d1d1f',
   },
-  content: {
+  scrollContent: {
     flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
+    overflow: 'auto',
   },
   section: {
     marginBottom: 16,
+    paddingBottom: 16,
+    borderBottom: '1px solid #e8e8ed',
+  },
+  sectionHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    cursor: 'pointer',
+    marginBottom: 4,
+  },
+  expandIcon: {
+    fontSize: 12,
+    color: '#86868b',
   },
   label: {
     fontSize: 13,
@@ -134,7 +144,8 @@ const styles: Record<string, React.CSSProperties> = {
     background: '#ffffff',
   },
   saveBtn: {
-    marginTop: 'auto',
+    marginTop: 8,
+    width: '100%',
     padding: '8px 16px',
     fontSize: 13,
     fontWeight: 600,

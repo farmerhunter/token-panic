@@ -3,24 +3,23 @@ import type { NativeImage } from 'electron';
 import * as path from 'path';
 
 const PANEL_WIDTH = 320;
-const PANEL_HEIGHT = 280;
+const PANEL_HEIGHT = 380;
 
 // ---- Tray icon generation (minimal template icon) ----
 
 function createTrayIcon(): NativeImage {
-  // Create a 16x16 template icon: a simple filled circle
-  // On macOS, setTemplateImage(true) means dark pixels show as black in light mode
-  // and white in dark mode, with transparent background.
+  // 16×16 template icon: a coin/token (circle with ¥ line through center).
+  // macOS inverts template images for dark mode automatically.
 
   const size = 16;
-  const scale = 2; // Retina
+  const scale = 2;
   const realSize = size * scale;
   const buf = Buffer.alloc(realSize * realSize * 4);
 
   const cx = realSize / 2;
   const cy = realSize / 2;
   const outerR = 7 * scale;
-  const innerR = 3 * scale;
+  const innerR = 2.5 * scale; // slim ring, like a coin edge
 
   for (let y = 0; y < realSize; y++) {
     for (let x = 0; x < realSize; x++) {
@@ -29,14 +28,18 @@ function createTrayIcon(): NativeImage {
       const dist = Math.sqrt(dx * dx + dy * dy);
       const i = (y * realSize + x) * 4;
 
+      // Coin ring
       if (dist <= outerR && dist > innerR) {
-        // Ring: dark (template-compatible)
-        buf[i] = 0;
-        buf[i + 1] = 0;
-        buf[i + 2] = 0;
-        buf[i + 3] = 255;
+        buf[i] = 0; buf[i + 1] = 0; buf[i + 2] = 0; buf[i + 3] = 255;
       }
-      // else: transparent
+      // Horizontal ¥ bar through center
+      else if (dist <= innerR && Math.abs(dy) <= 1.2 * scale) {
+        buf[i] = 0; buf[i + 1] = 0; buf[i + 2] = 0; buf[i + 3] = 255;
+      }
+      // Vertical ¥ bar from top of inner circle to bottom
+      else if (dist <= innerR && Math.abs(dx) <= 1 * scale) {
+        buf[i] = 0; buf[i + 1] = 0; buf[i + 2] = 0; buf[i + 3] = 255;
+      }
     }
   }
 
@@ -95,6 +98,8 @@ export function createTray(): TrayHandle {
     } else {
       positionPanel(panelWindow, tray);
       panelWindow.show();
+      // Notify renderer so it can request fresh data (P2-K)
+      panelWindow.webContents.send('panel:shown');
     }
   });
 

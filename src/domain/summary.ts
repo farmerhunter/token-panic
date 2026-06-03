@@ -79,6 +79,7 @@ function buildBaseSummary(snapshot: ProviderSnapshot): ProviderSummary {
     status: snapshot.status,
     quota_model: snapshot.quota_model,
     source: snapshot.source,
+    capture_method: snapshot.capture_method,
     primary_metric: '',
     last_fetch: snapshot.captured_at,
   };
@@ -129,6 +130,9 @@ function buildLimitSummary(
   payload: LimitPayload,
 ): ProviderSummary {
   const parts = payload.limits.map((limit) => {
+    if (limit.remaining !== undefined && limit.unit === 'percent') {
+      return `${limit.window} ${limit.remaining}% 剩余`;
+    }
     const usedStr = limit.unit === 'tokens' ? formatTokens(limit.used) : String(limit.used);
     const totalStr = limit.unit === 'tokens' ? formatTokens(limit.total) : String(limit.total);
     return `${limit.window} ${usedStr}/${totalStr}`;

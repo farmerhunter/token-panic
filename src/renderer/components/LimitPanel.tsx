@@ -2,27 +2,12 @@ import React from 'react';
 import type { ProviderSummary } from '@shared/types';
 
 interface Props {
-  summary: ProviderSummary | null;
-  loading: boolean;
+  summary: ProviderSummary;
+  onRefresh?: () => void;
+  onManualEdit?: () => void;
 }
 
-export function BalancePanel({ summary, loading }: Props) {
-  if (loading && !summary) {
-    return (
-      <div style={styles.card}>
-        <div style={styles.loadingText}>加载中…</div>
-      </div>
-    );
-  }
-
-  if (!summary) {
-    return (
-      <div style={styles.card}>
-        <div style={styles.errorText}>无法获取数据</div>
-      </div>
-    );
-  }
-
+export function LimitPanel({ summary, onRefresh, onManualEdit }: Props) {
   const statusLabel = getStatusLabel(summary.status);
 
   return (
@@ -44,21 +29,28 @@ export function BalancePanel({ summary, loading }: Props) {
         </div>
       )}
 
-      {summary.estimated_remaining && (
-        <div style={styles.remainingRow}>
-          <span style={styles.remainingText}>
-            按当前速度约还能撑 {formatRemaining(summary.estimated_remaining)}
-          </span>
-          {summary.burn_rate?.confidence && summary.burn_rate.confidence !== 'high' && (
-            <span style={styles.confidenceHint}>
-              {summary.burn_rate.confidence === 'medium' ? '(估算中)' : '(数据积累中)'}
-            </span>
-          )}
-        </div>
-      )}
-
-      <div style={styles.fetchTime}>
-        {formatTimeAgo(summary.last_fetch)}
+      <div style={styles.sourceRow}>
+        <span style={styles.sourceLabel}>
+          {summary.capture_method === 'safari_visible_tab' ? 'Safari 读取' : summary.source === 'manual' ? '手动录入' : '自动'}
+        </span>
+        <span style={styles.separator}>·</span>
+        <span style={styles.fetchTime}>{formatTimeAgo(summary.last_fetch)}</span>
+        {onRefresh && (
+          <>
+            <span style={styles.separator}>·</span>
+            <button style={styles.refreshLink} onClick={onRefresh}>
+              从 Safari 更新
+            </button>
+          </>
+        )}
+        {onManualEdit && (
+          <>
+            <span style={styles.separator}>·</span>
+            <button style={styles.refreshLink} onClick={onManualEdit}>
+              手动修改
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -67,9 +59,7 @@ export function BalancePanel({ summary, loading }: Props) {
 function getStatusLabel(status: string): string {
   switch (status) {
     case 'ok': return '正常';
-    case 'stale': return '可能过期';
-    case 'error': return '获取失败';
-    case 'auth_required': return '需要认证';
+    case 'manual_required': return '待录入';
     case 'disabled': return '已关闭';
     default: return status;
   }
@@ -78,9 +68,8 @@ function getStatusLabel(status: string): string {
 function statusBadgeStyle(status: string): React.CSSProperties {
   switch (status) {
     case 'ok': return { background: '#e8f5e9', color: '#2e7d32' };
-    case 'error':
-    case 'auth_required': return { background: '#fbe9e7', color: '#c62828' };
-    case 'stale': return { background: '#fff3e0', color: '#e65100' };
+    case 'manual_required': return { background: '#fff3e0', color: '#e65100' };
+    case 'disabled': return { background: '#f5f5f5', color: '#9e9e9e' };
     default: return { background: '#f5f5f5', color: '#616161' };
   }
 }
@@ -89,25 +78,10 @@ function formatTimeAgo(isoString: string): string {
   const now = Date.now();
   const then = new Date(isoString).getTime();
   const diffMs = now - then;
-
-  if (diffMs < 60_000) return '刚刚刷新';
+  if (diffMs < 60_000) return '刚刚';
   if (diffMs < 3_600_000) return `${Math.floor(diffMs / 60_000)} 分钟前`;
   if (diffMs < 86_400_000) return `${Math.floor(diffMs / 3_600_000)} 小时前`;
   return `${Math.floor(diffMs / 86_400_000)} 天前`;
-}
-
-function formatRemaining(estimated: { value: number; unit: string }): string {
-  switch (estimated.unit) {
-    case 'minutes':
-      return '< 1 小时';
-    case 'hours':
-      return `约 ${estimated.value} 小时`;
-    case 'days':
-      if (estimated.value >= 30) return '> 30 天';
-      return `约 ${estimated.value} 天`;
-    default:
-      return '';
-  }
 }
 
 const styles: Record<string, React.CSSProperties> = {
@@ -116,16 +90,6 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 10,
     padding: '14px 16px',
     boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-  },
-  loadingText: {
-    color: '#86868b',
-    textAlign: 'center',
-    padding: '20px 0',
-  },
-  errorText: {
-    color: '#c62828',
-    textAlign: 'center',
-    padding: '20px 0',
   },
   providerRow: {
     display: 'flex',
@@ -148,34 +112,42 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: 4,
   },
   primaryMetric: {
-    fontSize: 18,
-    fontWeight: 700,
+    fontSize: 15,
+    fontWeight: 600,
     color: '#1d1d1f',
+    lineHeight: 1.4,
+    whiteSpace: 'pre-wrap',
   },
   secondaryRow: {
-    marginBottom: 8,
+    marginBottom: 6,
   },
   secondaryMetric: {
     fontSize: 12,
     color: '#86868b',
   },
+  sourceRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 4,
+  },
+  sourceLabel: {
+    fontSize: 11,
+    color: '#aeaeb2',
+  },
+  separator: {
+    fontSize: 11,
+    color: '#d2d2d7',
+  },
   fetchTime: {
     fontSize: 11,
     color: '#aeaeb2',
   },
-  remainingRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 6,
-  },
-  remainingText: {
-    fontSize: 12,
-    color: '#1d1d1f',
-    fontWeight: 500,
-  },
-  confidenceHint: {
+  refreshLink: {
+    background: 'none',
+    border: 'none',
     fontSize: 11,
-    color: '#86868b',
+    color: '#007aff',
+    cursor: 'pointer',
+    padding: 0,
   },
 };

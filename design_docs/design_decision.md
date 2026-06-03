@@ -272,3 +272,171 @@
 - OCR 截图读取：不执行页面 JS，但需要 Screen Recording 权限，准确率和隐私风险更差，作为备选。
 - Safari Web Extension companion：授权边界更清晰，长期更产品化，但开发和签名成本更高，可作为后续路线。
 - 继续 Playwright/stealth：已明确否决。
+
+---
+
+### DD-016：Manual provider 走 write-event 管线，不走 scheduler/fetch 管线
+
+**问题**：Manual provider 的"数据来源"是用户在 UI 里手动录入或粘贴的值。如果强行让 manual adapter 实现 `fetchSnapshot()`——从 storage 里读上次用户输入——会让 adapter 变成 storage reader，违背 DD-002（adapter 不读 storage）。
+
+更深层的问题：manual provider 的本质是 **user write event**（用户决定何时录入数据），不是 **scheduled fetch event**（定时器驱动自动获取）。把它伪装成 fetch event 会产生几个错位：
+
+- `refresh_interval_min = 0` 变成特殊语义，scheduler 需要到处判断"这个 provider 是不是不用刷的"
+- "未录入数据"被表达为 fetch failure，但本质是 config/input missing
+- 后续 Safari assisted capture 也容易被塞进 adapter，边界继续变糊
+
+**决策**：
+
+1. **Manual provider 不注册到 scheduler**。scheduler 只管理 `refresh_interval_min > 0` 且 source 可主动 fetch 的 provider（如 `official_api`）。
+
+2. **Manual provider 的数据入口是 IPC write event**：
+
+```
+用户保存 manual limit
+  → IPC handler 接收 ManualLimitInput
+  → createManualLimitSnapshot(input) → validate
+  → store.saveSnapshot(snapshot)
+  → store.appendHistory(snapshot)（可选，为将来准备）
+  → generateSummary(snapshot, history?)
+  → push snapshot:updated to renderer
+```
+
+3. **保留轻量 provider definition 用于配置和展示**，不实现 `fetchSnapshot`：
+
+```ts
+export const chatgptManualProvider = {
+  id: 'chatgpt',
+  name: 'ChatGPT',
+  source: 'manual' as const,
+  quota_model: 'limit' as const,
+  refresh_interval_min: 0,
+  // 不实现 fetchSnapshot
+};
+```
+
+4. **新增 `manual_required` 状态**（扩展 `ProviderStatus` union type）。含义：该 provider 需要用户输入/确认后才有 snapshot。和 `auth_required` 不同：不是凭证问题，是输入缺失或半自动读取需要用户确认。
+
+ProviderStatus 更新为：
+```ts
+type ProviderStatus =
+  | 'ok'
+  | 'stale'
+  | 'error'
+  | 'auth_required'
+  | 'manual_required'  // 新增
+  | 'disabled';
+```
+
+UI 对 `manual_required` 的展示："点击设置 → 录入 ChatGPT 限额数据"。
+
+**理由**：
+- 保持 DD-002 边界（adapter 不读 storage）
+- scheduler 不需要为 manual provider 引入特殊分支
+- 后续 Safari capture 同样走 write-event 模式（用户点击触发 → AppleScript 读取 → parser → 用户确认 → IPC save），不会污染 adapter 层
+- 新增的 `manual_required` 状态比复用 `disabled` 更精确，UI 可以给出正确的引导文案
+
+**替代方案**：
+- 给 AdapterContext 加 `getManualSnapshot`：被否决，adapter 开始读 storage，边界模糊
+- 复用 `disabled` 表示未录入：语义不精确，用户分不清是"我不想要这个 provider"还是"我还没填数据"
+
+---
+
+### DD-017：Safari capture diagnostics 采用 metadata trace + 显式 debug bundle
+
+**问题**：Safari visible-tab assisted capture 和本地 parser 都可能失败。用户只看到"未能解析到限额数据"时，无法判断问题出在 Safari tab 定位、AppleScript 读取、页面文本内容、parser 规则，还是页面结构变化。为了后续能把问题带回 coding agent 协作定位，需要足够的 diagnostics trace。
+
+但 ChatGPT/Codex analytics 页面文本可能包含敏感信息。若每次 capture 都把完整 `document.body.innerText` 自动写入日志，会和 DD-015 的风险控制冲突，也会让 debug 文件长期保存敏感 raw data。
+
+**决策**：
+
+1. **默认记录 metadata-only diagnostics**。每次 Safari capture 和 parser 运行都生成 `trace_id`，写入 JSONL diagnostics log，但默认只记录：
+   - component/action/status
+   - URL host/path、tab title、文本长度、行数
+   - parser 尝试过的 strategy、候选行摘要、失败原因
+   - timestamp 和 trace 关联信息
+
+2. **完整页面文本默认只进入短期内存缓存**。capture 得到的 raw text 不自动落盘、不写 console。内存缓存只保留少量最近 trace，并设置短 TTL。当前实现为最多 3 条、10 分钟过期。
+
+3. **debug bundle 由用户显式导出**。UI 提供两个导出路径：
+   - 不含完整文本：导出 environment、trace、parser diagnostics。
+   - 含完整文本：只有用户明确选择时，才从短期内存缓存写出 `raw-text.txt`。
+
+4. **parser diagnostics 属于 domain observability，不属于 parser 输出语义**。`parseLimitText()` 保持原有业务接口；新增 `parseLimitTextWithDiagnostics()` 用于排障。业务保存 snapshot 时只依赖解析结果，不依赖 diagnostics。
+
+5. **debug bundle 是排障 artifact，不是业务历史**。它不进入 provider history，不参与 summary/burn rate，不作为长期数据源。bundle 路径在 UI 显示给用户，用于人工检查或发给 coding agent。
+
+**理由**：
+- metadata trace 足以定位大多数失败阶段，同时避免默认持久化敏感 raw data。
+- `trace_id` 让 renderer、main process、Safari capture、parser 的事件可以串起来，适合异步 IPC/Electron 架构。
+- 显式 debug bundle 给 troubleshooting 留出口，又让用户在导出完整文本前有明确动作。
+- 把 diagnostics 放在 parser 的旁路接口里，可以提升可观测性，同时不污染 core domain 的正常数据模型。
+- 短期内存 raw cache 避免"刚失败就没法导出"的问题，也避免长期保存页面内容。
+
+**替代方案**：
+- 每次 capture 自动保存完整 raw text：被否决，隐私和敏感数据风险过高。
+- 只在 UI 展示失败文案，不保存任何 trace：被否决，后续无法协作定位 parser 或 capture 问题。
+- 直接把 diagnostics 写进 snapshot/history：被否决，排障数据和业务数据职责不同，且会扩大持久化敏感信息的风险。
+- 只用 console log：被否决，Electron main/renderer 日志分散，用户难以稳定导出，也不适合异步 trace 关联。
+
+---
+
+### DD-021：Reset time 解析暂缓
+
+**问题**：Codex analytics 页面文本中包含 reset 时间行（`Resets 2:21 PM`、`Resets Jun 8, 2026 10:59 AM`）。是否应在当前阶段解析 `resets_at` 并写入 snapshot？
+
+**决策**：暂不实现 reset time 解析。当前 parser diagnostics 记录这些行作为 candidate line，但不写入 snapshot 的 `resets_at` 字段。具体实现推迟到后续阶段。
+
+**理由**：
+- 5h window 的 reset 时间是相对时间（"2:21 PM"），需要推断日期（今天？明天？），涉及 timezone 和 date rollover 逻辑
+- Weekly reset 有完整日期但同样需要 timezone 假设（页面显示的是本地时间？UTC？）
+- 错误的 reset 时间会污染 snapshot，比缺失 reset 时间更糟
+- 页面格式已验证存在 reset 信息，后续专门做 reset parser 时已有 fixture 数据
+
+**替代方案**：
+- 用 ad hoc 正则+Date.parse 强行解析：被否决，脆弱且错误率高
+- 完全忽略 reset 行：parser diagnostics 已记录但不写入，满足当前需求
+
+---
+
+### DD-022：Dashboard 交互采用轻量 View union + ViewModel 契约
+
+**问题**：ChatGPT/Codex manual provider 和 Safari assisted capture 引入后，dashboard 同时承担查看状态、刷新 DeepSeek、进入设置、Safari 读取、手动修改、展示 diagnostics fallback 等多个职责。早期实现把这些行为分散在多个 boolean、provider hook 和 JSX 条件判断中，导致交互状态不够稳定：
+
+- ChatGPT snapshot 保存后能显示，但应用重启后可能没有通过 `snapshot:reply` 加载回来。
+- ChatGPT 有数据后，Safari 更新和手动修改入口容易因为 JSX 分支变化而丢失。
+- DeepSeek 和 ChatGPT 的 summary 订阅路径不一致，容易出现 provider 状态互相覆盖或遗漏。
+
+**决策**：
+
+1. renderer 顶层页面状态统一为 TypeScript discriminated union：
+   - `dashboard`
+   - `settings`
+   - `quick-capture`
+   - `manual-input`
+
+2. 所有 provider summary 通过统一的 provider hook 读取和订阅：
+   - 初始进入 panel 时请求 `snapshot:request`
+   - 同时监听 `snapshot:reply` 和 `snapshot:updated`
+   - 按 `provider_id` 过滤事件
+   - `initialSummary` 只作为无持久化数据时的占位 UI
+
+3. Dashboard 动作和 provider 卡片状态由纯函数 `toDashboardViewModel()` 生成，JSX 只负责渲染 ViewModel：
+   - header action：`refresh_deepseek`、`open_settings`
+   - ChatGPT action：`quick_capture_chatgpt`、`manual_input_chatgpt`
+   - ChatGPT 无数据和已有数据两种状态下都保留 Safari 读取/更新和手动输入/修改入口
+
+4. 用 ViewModel 单元测试固定交互契约，而不是先引入 React component testing 或外部状态管理框架。
+
+**理由**：
+
+- 当前窗口页面数量少，`View` union 能直接表达互斥页面状态，成本低于 React Router。
+- 当前共享状态主要是 provider summary，统一 hook 足以收敛订阅路径，成本低于 Zustand/Redux。
+- 当前异步流程复杂度主要在 Safari capture 和 diagnostics，不在多状态并发跳转；先用纯函数 ViewModel 固定 UI 行为，比引入 XState 更贴合 MVP。
+- ViewModel 测试能覆盖“入口是否存在、provider 是否隔离、默认状态是否正确”等高风险交互问题，适合 coding agent 后续协作排查。
+
+**替代方案**：
+
+- 立刻引入成熟前端框架或组件库：暂缓。当前问题是交互状态契约缺失，不是 UI 组件能力不足。
+- 引入 React Router：暂缓。应用是小型 Electron panel，不存在复杂 URL、深链或浏览器历史需求。
+- 引入 Zustand/Redux：暂缓。全局状态暂时没有复杂写入竞争，provider hook + ViewModel 已覆盖当前需求。
+- 引入 XState：暂缓。若后续 capture 出现并发取消、重试队列、多步骤 wizard 或跨窗口状态同步，再重新评估。

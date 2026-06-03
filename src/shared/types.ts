@@ -13,6 +13,7 @@ export type ProviderStatus =
   | 'stale'
   | 'error'
   | 'auth_required'
+  | 'manual_required'
   | 'disabled';
 
 export type QuotaModel = 'balance' | 'limit' | 'usage' | 'cost';
@@ -38,6 +39,7 @@ export interface LimitPayload {
     used: number;
     total: number;
     unit: 'tokens' | 'messages' | 'requests' | string;
+    remaining?: number;
     resets_at?: string;
   }>;
 }
@@ -79,6 +81,7 @@ export interface ProviderSnapshot {
   status: ProviderStatus;
   status_reason?: string;
   plan?: string;
+  capture_method?: string; // e.g. 'safari_visible_tab', 'manual_form'
   payload: QuotaPayload;
 }
 
@@ -104,6 +107,7 @@ export interface ProviderSummary {
   status: ProviderStatus;
   quota_model: QuotaModel;
   source: ProviderSource;
+  capture_method?: string;
   primary_metric: string;
   secondary_metric?: string;
   burn_rate?: BurnRate;
