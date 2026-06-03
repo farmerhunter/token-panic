@@ -30,6 +30,7 @@ const CHATGPT_EMPTY: ProviderSummary = {
 export function App() {
   const { summary: deepseekSummary, loading, refresh } = useSnapshot('deepseek');
   const { summary: chatgptSummary } = useSnapshot('chatgpt', CHATGPT_EMPTY);
+  const { summary: openaiSummary, loading: openaiLoading, refresh: refreshOpenAI } = useSnapshot('openai_platform');
   const [view, setView] = useState<View>({ page: 'dashboard' });
 
   // ---- Navigation helpers ----
@@ -72,6 +73,8 @@ export function App() {
       const dashboard = toDashboardViewModel({
         deepseekSummary,
         deepseekLoading: loading,
+        openaiSummary,
+        openaiLoading,
         chatgptSummary,
       });
 
@@ -125,6 +128,15 @@ export function App() {
                   onManualEdit={dashboard.limitProvider.actions.includes('manual_input_chatgpt') ? goManualInput : undefined}
                 />
               )}
+            </div>
+
+            {/* Cost/Usage providers */}
+            <div style={styles.section}>
+              <div style={styles.sectionTitle}>用量/费用</div>
+              <BalancePanel
+                summary={dashboard.costProvider.summary}
+                loading={dashboard.costProvider.loading}
+              />
             </div>
           </div>
 

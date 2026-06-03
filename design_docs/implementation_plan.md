@@ -404,9 +404,31 @@ debug-bundle-<trace_id>/
 
 ---
 
+## 全阶段通用准则
+
+### 测试优先
+
+下列场景必须 test-first——先写测试定义契约，测试失败后再写实现：
+
+- 新增或修改 provider adapter（先写 adapter raw→snapshot 测试 + error case 测试）
+- 新增或修改 Dashboard ViewModel（先写 action availability 测试 + provider isolation 测试）
+- 新增或修改 parser（先写 fixture→parse result 测试 + failure reason 测试）
+- 新增或修改跨层数据字段（先更新 ViewModel test fixture 验证字段传递）
+
+不强制 test-first 的场景：纯样式调整、文案修改、已有的 renderer 组件内部重构（不改变交互契约时）。
+
+---
+
 ## 阶段 5：Multi-provider —— 全量接入
 
 （下一主线）
+
+### 前置原则
+
+- 新 provider 接入不破坏已有 ChatGPT/Codex Safari/manual 入口和 DeepSeek balance 刷新。
+- Dashboard 行为由 `toDashboardViewModel()` 和其测试保护。
+- JSX 不直接写 provider-specific 判断。
+- 每加一个 provider，补 ViewModel tests。
 
 ### 增量目标
 

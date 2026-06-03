@@ -5,6 +5,7 @@ import { getScheduler } from './scheduler';
 import { Store } from '../storage/store';
 import { FileCredentialStore } from '../credentials/credential-store';
 import { deepseekAdapter } from '../adapters/deepseek';
+import { openaiPlatformAdapter } from '../adapters/openai-platform';
 import { generateSummary } from '../domain/summary';
 import { validateSnapshot } from '../domain/normalize';
 import { processHistory } from '../domain/history';
@@ -94,12 +95,45 @@ app.whenReady().then(() => {
     return result;
   });
 
-  // Load API key and kick off initial fetch
-  credentialStore.get('deepseek').then((apiKey) => {
-    if (apiKey) {
-      scheduler.setApiKey('deepseek', apiKey);
+  // ---- OpenAI Platform: official API + cost model (Phase 5) ----
+
+  scheduler.register(openaiPlatformAdapter, async (adapter, ctx) => {
+    const result = await adapter.fetchSnapshot(ctx);
+    if (result.snapshot) {
+      const validationError = validateSnapshot(result.snapshot);
+      if (validationError) {
+        console.error(`Snapshot validation failed for ${adapter.id}: ${validationError}`);
+        result.snapshot.status = 'error';
+        result.snapshot.status_reason = validationError;
+      }
     }
+
+    const lastSuccess = await store.getSnapshot(adapter.id);
+
+    if (result.snapshot && result.snapshot.status === 'ok') {
+      await store.saveSnapshot(result.snapshot);
+      const summary = generateSummary(result.snapshot, lastSuccess);
+      if (panelWindow && !panelWindow.isDestroyed()) {
+        panelWindow.webContents.send('snapshot:updated', summary);
+      }
+      return result;
+    }
+
+    const summary = generateSummary(result.snapshot, lastSuccess);
+    if (panelWindow && !panelWindow.isDestroyed()) {
+      panelWindow.webContents.send('snapshot:updated', summary);
+    }
+    return result;
+  });
+
+  // Load API keys and kick off initial fetches
+  credentialStore.get('deepseek').then((apiKey) => {
+    if (apiKey) scheduler.setApiKey('deepseek', apiKey);
     scheduler.triggerNow(deepseekAdapter.id);
+  });
+  credentialStore.get('openai_platform').then((apiKey) => {
+    if (apiKey) scheduler.setApiKey('openai_platform', apiKey);
+    scheduler.triggerNow(openaiPlatformAdapter.id);
   });
 
   // Load preferences and start auto-refresh if enabled

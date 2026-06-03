@@ -25,8 +25,7 @@ export function registerIpcHandlers(ctx: IpcContext): void {
   // ---- Snapshot ----
 
   ipcMain.on('snapshot:request', async () => {
-    // Reply for each known provider so renderer hooks filter by provider_id
-    for (const pid of ['deepseek', 'chatgpt']) {
+    for (const pid of ['deepseek', 'openai_platform', 'chatgpt']) {
       const snapshot = await ctx.store.getSnapshot(pid);
       const summary = generateSummary(snapshot);
       push(ctx.getPanelWindow(), 'snapshot:reply', summary);
@@ -43,11 +42,11 @@ export function registerIpcHandlers(ctx: IpcContext): void {
   // ---- Config ----
 
   ipcMain.on('config:get', async () => {
-    const hasKey = (await ctx.credentialStore.get('deepseek')) !== null;
-    push(ctx.getPanelWindow(), 'config:reply', {
-      provider_id: 'deepseek',
-      has_key: hasKey,
-    });
+    const dsHasKey = (await ctx.credentialStore.get('deepseek')) !== null;
+    const oaHasKey = (await ctx.credentialStore.get('openai_platform')) !== null;
+    // Reply for each
+    push(ctx.getPanelWindow(), 'config:reply', { provider_id: 'deepseek', has_key: dsHasKey });
+    push(ctx.getPanelWindow(), 'config:reply', { provider_id: 'openai_platform', has_key: oaHasKey });
   });
 
   ipcMain.on('config:update', async (_event, data: { provider_id: string; api_key: string }) => {

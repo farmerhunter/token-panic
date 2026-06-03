@@ -380,6 +380,81 @@ UI 对 `manual_required` 的展示："点击设置 → 录入 ChatGPT 限额数�
 
 ---
 
+## 阶段 5：Multi-provider
+
+### DD-023：OpenAI Platform 使用 `/v1/organization/costs` API
+
+**问题**：Phase 5 需要接入 OpenAI Platform 的用量/费用数据。是否有可用的官方 API？
+
+**调研结论**：
+
+| API | 状态 |
+|-----|------|
+| `GET /v1/usage` | ⚠️ 自 2025 年 9 月起频繁返回空数据，不可靠 |
+| `GET /v1/organization/costs?start_time&end_time` | ✅ 可用，返回按天费用明细 |
+| `GET /v1/organization/usage/completions?start_time&end_time` | ✅ 可用，返回 token 用量 |
+| `/v1/dashboard/billing/*` | ❌ 仅浏览器 session key，不可编程访问 |
+
+**决策**：使用 `GET /v1/organization/costs` 作为主数据源，`quota_model = cost`。需要用户提供 **organization admin API key**（非普通 secret key）。如果用户同时提供 admin key，可额外查询 `/v1/organization/usage/completions` 获得 token 用量（`quota_model` 可扩展为同时展示 cost + usage）。
+
+**理由**：
+- 是官方 API，不需要 browser scrape
+- 返回结构化 JSON，可直接 normalize
+- admin key 是架构已支持的 API key 模式（`CredentialStore` 接口）
+- 与 ChatGPT/Codex 订阅限额完全独立，不会混淆
+
+**风险**：admin key 权限高于普通 API key，用户需在 OpenAI Platform 设置中创建。如果用户没有 org owner 权限，可能无法获取 admin key。此时回退到 `manual` source。
+
+### Provider Candidate 审查：OpenAI Platform
+
+| 问题 | 回答 |
+|------|------|
+| provider_id | `openai_platform` |
+| source | `official_api` |
+| quota_model | `cost`（主），可扩展 `usage`（如需 token 量） |
+| 是否可主动 refresh | ✅ scheduler，建议 60min 间隔（费用数据非实时） |
+| credential 形态 | Organization admin API key（非普通 secret key），通过 `CredentialStore` 管理 |
+| 成功 snapshot payload | `CostPayload { periods: [{ key: "day", spend_amount: 1.05, currency: "USD" }] }` |
+| 失败状态 | `auth_required`（401/403，admin key 无效或权限不足）、`error`（网络错误、超时、API schema 变更、今日无数据） |
+| UI action | `refresh_openai_platform`（刷新）、`edit_api_key`（设置中配置 key） |
+| diagnostics 需求 | 无特殊需求，API 返回结构化 JSON，parse 失败概率低 |
+
+风险评估：admin key 权限高于普通 API key。如果用户无 org owner 权限则无法获取。回退方案：`manual` source。
+
+### Provider Candidate 审查：MiniMax
+
+| 问题 | 回答 |
+|------|------|
+| provider_id | `minimax` |
+| source | `official_api` |
+| quota_model | `balance`（按架构文档） |
+| 是否可主动 refresh | 待验证 |
+| credential 形态 | 待验证（推测 API key） |
+| 成功 snapshot payload | 待验证 |
+| 失败状态 | 待验证 |
+| UI action | 待验证 |
+| diagnostics 需求 | 待验证 |
+
+**决策**：暂缓（DD-024）。IMPL-002 要求在写 adapter 前验证 API。MiniMax API 文档无法通过 WebFetch 访问，无法确认 endpoint URL、鉴权方式和返回格式。
+
+### DD-024：MiniMax 暂缓，无法验证 API
+
+**问题**：MiniMax 是否有可用的 balance API？
+
+**调研结论**：无法通过 web search 和 WebFetch 访问 MiniMax API 文档（platform.minimax.io 被拦截）。架构文档中标记为 `official_api + balance`，但无法验证具体 endpoint 和返回格式。
+
+**决策**：MiniMax 暂不接入 Phase 5。待用户可以手动访问 MiniMax API 文档或提供已验证的 API endpoint 信息后，再按 IMPL-002 做 feasibility probe。
+
+**替代方案**：凭经验假设 `/v1/user/balance` 存在。被否决——IMPL-002 要求在写 adapter 前验证 API。
+
+### DD-025：Phase 5 先接 OpenAI Platform，其余 deferred
+
+**决策**：Phase 5 只接 OpenAI Platform（`official_api + cost`）。MiniMax deferred，其他 provider 后续再评估。
+
+**理由**：OpenAI Platform API 已验证存在且可编程访问。单 provider 接入可以验证多 provider 架构扩展（dashboard ViewModel、provider config contract）而不引入过多复杂度。按任务 5 的 8 步顺序实现。测试优先。
+
+---
+
 ### DD-021：Reset time 解析暂缓
 
 **问题**：Codex analytics 页面文本中包含 reset 时间行（`Resets 2:21 PM`、`Resets Jun 8, 2026 10:59 AM`）。是否应在当前阶段解析 `resets_at` 并写入 snapshot？

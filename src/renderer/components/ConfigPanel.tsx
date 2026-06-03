@@ -7,6 +7,38 @@ interface Props {
 }
 
 export function ConfigPanel({ onBack, onSaved }: Props) {
+  return (
+    <div style={styles.container}>
+      <div style={styles.header}>
+        <button style={styles.backBtn} onClick={onBack}>← 返回</button>
+        <span style={styles.title}>设置</span>
+        <span style={{ width: 50 }} />
+      </div>
+
+      <div style={styles.scrollContent}>
+        <ApiKeySection
+          providerId="deepseek"
+          label="DeepSeek API Key"
+          hint="在 DeepSeek 平台「API Keys」页面创建。密钥保存在本地，不会上传。"
+          onSaved={onSaved}
+        />
+        <ApiKeySection
+          providerId="openai_platform"
+          label="OpenAI Platform API Key"
+          hint="需要 organization admin API key（非普通 secret key）。在 platform.openai.com → Settings → Organization → API keys 创建。"
+          onSaved={onSaved}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ApiKeySection({ providerId, label, hint, onSaved }: {
+  providerId: string;
+  label: string;
+  hint: string;
+  onSaved: () => void;
+}) {
   const [apiKey, setApiKey] = useState('');
   const [hasKey, setHasKey] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -16,13 +48,15 @@ export function ConfigPanel({ onBack, onSaved }: Props) {
     if (!api) return;
 
     const unsubscribe = api.onConfigReply((data: ConfigData) => {
-      setHasKey(data.has_key);
+      if (data.provider_id === providerId) {
+        setHasKey(data.has_key);
+      }
     });
 
     api.requestConfig();
 
     return unsubscribe;
-  }, []);
+  }, [providerId]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -34,42 +68,28 @@ export function ConfigPanel({ onBack, onSaved }: Props) {
     setTimeout(() => {
       if (unsubscribe) { unsubscribe(); setSaving(false); onSaved(); }
     }, 8000);
-    window.electronAPI?.updateConfig('deepseek', apiKey.trim());
+    window.electronAPI?.updateConfig(providerId, apiKey.trim());
   };
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
-        <button style={styles.backBtn} onClick={onBack}>
-          ← 返回
+    <div style={styles.section}>
+      <div style={styles.label}>{label}</div>
+      <div style={styles.hint}>{hint}</div>
+      <input
+        type="password"
+        style={styles.input}
+        placeholder={hasKey ? '已配置（输入新密钥覆盖）' : 'sk-…'}
+        value={apiKey}
+        onChange={(e) => setApiKey(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && apiKey.trim()) handleSave();
+        }}
+      />
+      {apiKey.trim() && (
+        <button style={styles.saveBtn} disabled={saving} onClick={handleSave}>
+          {saving ? '保存中…' : '保存并刷新'}
         </button>
-        <span style={styles.title}>设置</span>
-        <span style={{ width: 50 }} />
-      </div>
-
-      <div style={styles.scrollContent}>
-        <div style={styles.section}>
-          <div style={styles.label}>DeepSeek API Key</div>
-          <div style={styles.hint}>
-            在 DeepSeek 平台「API Keys」页面创建。密钥保存在本地，不会上传。
-          </div>
-          <input
-            type="password"
-            style={styles.input}
-            placeholder={hasKey ? '已配置（输入新密钥覆盖）' : 'sk-…'}
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && apiKey.trim()) handleSave();
-            }}
-          />
-          {apiKey.trim() && (
-            <button style={styles.saveBtn} disabled={saving} onClick={handleSave}>
-              {saving ? '保存中…' : '保存并刷新'}
-            </button>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   );
 }

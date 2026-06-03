@@ -2,6 +2,7 @@ import type { ProviderSummary } from '@shared/types';
 
 export type DashboardActionId =
   | 'refresh_deepseek'
+  | 'refresh_openai_platform'
   | 'open_settings'
   | 'quick_capture_chatgpt'
   | 'manual_input_chatgpt';
@@ -20,13 +21,17 @@ export type LimitProviderCardVM =
       actions: DashboardActionId[];
     };
 
+export interface ProviderCardVM {
+  provider_id: string;
+  summary: ProviderSummary | null;
+  loading: boolean;
+  actions: DashboardActionId[];
+}
+
 export interface DashboardViewModel {
   headerActions: DashboardActionId[];
-  balanceProvider: {
-    provider_id: 'deepseek';
-    summary: ProviderSummary | null;
-    loading: boolean;
-  };
+  balanceProvider: ProviderCardVM;
+  costProvider: ProviderCardVM;
   limitProvider: LimitProviderCardVM;
 }
 
@@ -38,6 +43,8 @@ const CHATGPT_ACTIONS: DashboardActionId[] = [
 export function toDashboardViewModel(input: {
   deepseekSummary: ProviderSummary | null;
   deepseekLoading: boolean;
+  openaiSummary: ProviderSummary | null;
+  openaiLoading: boolean;
   chatgptSummary: ProviderSummary | null;
 }): DashboardViewModel {
   return {
@@ -46,6 +53,13 @@ export function toDashboardViewModel(input: {
       provider_id: 'deepseek',
       summary: input.deepseekSummary,
       loading: input.deepseekLoading,
+      actions: ['refresh_deepseek'],
+    },
+    costProvider: {
+      provider_id: 'openai_platform',
+      summary: input.openaiSummary,
+      loading: input.openaiLoading,
+      actions: ['refresh_openai_platform'],
     },
     limitProvider: toChatGptLimitCard(input.chatgptSummary),
   };
