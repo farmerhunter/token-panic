@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import type { ConfigData } from '@shared/types';
 import { CONFIGURABLE_PROVIDER_METAS } from '@shared/provider-metadata';
 
@@ -8,6 +8,26 @@ interface Props {
 }
 
 export function ConfigPanel({ onBack, onSaved }: Props) {
+  const [openAtLogin, setOpenAtLogin] = useState(false);
+  const [startupSupported, setStartupSupported] = useState(false);
+
+  useEffect(() => {
+    const api = window.electronAPI;
+    if (!api) return;
+    const unsub = api.onStartupReply((data: any) => {
+      setOpenAtLogin(data.openAtLogin);
+      setStartupSupported(data.supported);
+    });
+    api.getStartupSettings();
+    return unsub;
+  }, []);
+
+  const toggleStartup = useCallback(() => {
+    const next = !openAtLogin;
+    setOpenAtLogin(next);
+    window.electronAPI?.setStartupSettings(next);
+  }, [openAtLogin]);
+
   return (
     <div style={styles.container}>
       <div style={styles.header}>
@@ -26,6 +46,30 @@ export function ConfigPanel({ onBack, onSaved }: Props) {
             onSaved={onSaved}
           />
         ))}
+
+        {startupSupported && (
+          <div style={styles.section}>
+            <div style={styles.startupRow}>
+              <div>
+                <div style={styles.label}>开机启动</div>
+                <div style={styles.hint}>登录时自动在菜单栏启动 token-panic</div>
+              </div>
+              <button
+                style={{
+                  ...styles.toggle,
+                  background: openAtLogin ? '#34c759' : '#e5e5ea',
+                }}
+                onClick={toggleStartup}
+              >
+                <span style={{
+                  ...styles.toggleKnob,
+                  marginLeft: openAtLogin ? 20 : 2,
+                }}>
+                </span>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -172,5 +216,29 @@ const styles: Record<string, React.CSSProperties> = {
     border: 'none',
     borderRadius: 6,
     cursor: 'pointer',
+  },
+  startupRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  toggle: {
+    width: 48,
+    height: 28,
+    borderRadius: 14,
+    border: 'none',
+    cursor: 'pointer',
+    padding: 0,
+    position: 'relative' as const,
+    transition: 'background 0.2s',
+  },
+  toggleKnob: {
+    display: 'block',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    background: '#ffffff',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+    transition: 'margin-left 0.2s',
   },
 };

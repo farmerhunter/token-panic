@@ -12,7 +12,7 @@
     "build:renderer": "vite build",
     "build": "npm run build:main && npm run build:renderer",
     "package:dir": "npm run build && electron-builder --dir",
-    "package:mac": "npm run build && electron-builder --mac",
+    "package:mac": "npm run build && electron-builder --mac && scripts/apply-dmg-icon.sh",
     "test": "vitest run",
     "test:watch": "vitest"
   },

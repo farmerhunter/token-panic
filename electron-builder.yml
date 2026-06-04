@@ -10,8 +10,19 @@ files:
   - '!dist/**/*.test.d.ts'
 mac:
   category: public.app-category.utilities
+  icon: build/icon.icns
   target:
     - dmg
     - dir
+dmg:
+  icon: null
+  backgroundColor: '#f5f5f5'
+  contents:
+    - x: 140
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
 # asar: false for MVP — verify paths first, enable asar in Phase 6B
 asar: false

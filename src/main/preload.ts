@@ -73,9 +73,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return on('safari-capture:error', callback);
   },
 
+  // Phase 6B — Login Item
+  getStartupSettings: () => {
+    ipcRenderer.send('startup:get');
+  },
+  setStartupSettings: (openAtLogin: boolean) => {
+    ipcRenderer.send('startup:update', { openAtLogin });
+  },
+  onStartupReply: (callback: (data: unknown) => void) => {
+    return on('startup:reply', callback);
+  },
+
   // Panel lifecycle
   onPanelShown: (callback: () => void) => {
     return on('panel:shown', callback);
+  },
+  onOpenSettingsRequested: (callback: () => void) => {
+    return on('panel:open-settings', callback);
   },
 
   // Diagnostics

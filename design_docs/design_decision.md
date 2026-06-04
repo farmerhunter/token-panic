@@ -609,3 +609,35 @@ UI 对 `manual_required` 的展示："点击设置 → 录入 ChatGPT 限额数�
 **风险**：
 - macOS Automation 权限在 packaged app 下可能需要重新授权（bundle ID 变更）
 - ad-hoc signing 无法通过 Gatekeeper，需用户手动允许
+
+---
+
+### DD-030：Login item uses Electron app.setLoginItemSettings
+
+**问题**：用户希望 token-panic 在登录时自动启动。
+
+**决策**：使用 Electron 官方 API `app.getLoginItemSettings()` / `app.setLoginItemSettings({ openAtLogin })`。IPC 提供 `startup:get` / `startup:update`，preload 暴露 `getStartupSettings` / `setStartupSettings`，ConfigPanel 增加 iOS 风格 toggle 开关。
+
+**理由**：Electron 内置 API 足够，不需要第三方 auto-launch 库。仅在 packaged app 中可靠生效。
+
+### DD-031：App icon is separate from tray template icon
+
+**问题**：electron-builder 默认使用 Electron 通用图标，Finder 中显示为空白文档。
+
+**决策**：新增 `build/icon.icns`（深色圆角方块 + 大号白色 `$`，背景弱化 gauge/fan 意向，1024px → icns）。`electron-builder.yml` 配置 `mac.icon: build/icon.icns`。DMG 使用纯色背景，显式设置 `dmg.icon: null`，避免 Finder 显示隐藏文件时露出 `.VolumeIcon.icns` support file。`package:mac` 在 electron-builder 后调用 `scripts/apply-dmg-icon.sh`，把 icon 写到 `.dmg` 文件本身的 Finder custom icon。Tray icon 继续使用 template image（菜单栏仅需单色轮廓）。
+
+**理由**：App icon（Finder/DMG）需要彩色和大尺寸，tray icon（菜单栏）需要 template monochrome。两者职责不同，不应复用同一个文件。
+
+---
+
+### DD-032：Menu bar app must expose install and exit affordances
+
+**问题**：菜单栏应用没有主窗口 Dock 入口，若不提供明确退出入口，用户很难判断应用如何关闭。DMG 若没有 `/Applications` 拖拽入口，用户也不清楚是否需要安装、如何安装。
+
+**决策**：
+- `electron-builder.yml` 的 `dmg.contents` 增加 app 图标和 `/Applications` link，支持标准拖拽安装。
+- Tray 左键只打开/隐藏 panel；右键菜单提供 `打开面板`、`设置`、`开机启动`、`退出 token-panic`。
+- 右键弹出菜单前隐藏已打开的 panel，避免 context menu 和 dashboard 同时停留在屏幕上。
+- `设置` 菜单项通过 main → renderer 的 `panel:open-settings` 事件进入 Settings，不让 main process 直接知道 React view 结构。
+
+**理由**：菜单栏工具必须把生命周期操作显式暴露给用户。安装和退出属于应用壳契约，不应只依赖 macOS 默认行为或开发者命令。

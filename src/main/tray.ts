@@ -1,52 +1,126 @@
-import { Tray, BrowserWindow, nativeImage, screen, app } from 'electron';
+import { Tray, BrowserWindow, nativeImage, screen, app, Menu } from 'electron';
 import type { NativeImage } from 'electron';
 import * as path from 'path';
 
 const PANEL_WIDTH = 320;
 const PANEL_HEIGHT = 380;
 
-// ---- Tray icon generation (minimal template icon) ----
+// ---- Tray icon generation (template icon) ----
 
 function createTrayIcon(): NativeImage {
-  // 16×16 template icon: a coin/token (circle with ¥ line through center).
-  // macOS inverts template images for dark mode automatically.
-
-  const size = 16;
-  const scale = 2;
+  const size = 22;
+  const scale = 3;
   const realSize = size * scale;
   const buf = Buffer.alloc(realSize * realSize * 4);
 
-  const cx = realSize / 2;
-  const cy = realSize / 2;
-  const outerR = 7 * scale;
-  const innerR = 2.5 * scale; // slim ring, like a coin edge
+  const setPixel = (x: number, y: number, alpha = 255, clear = false) => {
+    const ix = Math.round(x);
+    const iy = Math.round(y);
+    if (ix < 0 || iy < 0 || ix >= realSize || iy >= realSize) return;
+    const i = (iy * realSize + ix) * 4;
+    buf[i] = 0;
+    buf[i + 1] = 0;
+    buf[i + 2] = 0;
+    buf[i + 3] = clear ? 0 : Math.max(buf[i + 3], alpha);
+  };
 
-  for (let y = 0; y < realSize; y++) {
-    for (let x = 0; x < realSize; x++) {
-      const dx = x - cx;
-      const dy = y - cy;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      const i = (y * realSize + x) * 4;
+  const pointToSegmentDistance = (
+    px: number,
+    py: number,
+    ax: number,
+    ay: number,
+    bx: number,
+    by: number,
+  ) => {
+    const dx = bx - ax;
+    const dy = by - ay;
+    const lenSq = dx * dx + dy * dy;
+    if (lenSq === 0) return Math.hypot(px - ax, py - ay);
+    const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
+    return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+  };
 
-      // Coin ring
-      if (dist <= outerR && dist > innerR) {
-        buf[i] = 0; buf[i + 1] = 0; buf[i + 2] = 0; buf[i + 3] = 255;
-      }
-      // Horizontal ¥ bar through center
-      else if (dist <= innerR && Math.abs(dy) <= 1.2 * scale) {
-        buf[i] = 0; buf[i + 1] = 0; buf[i + 2] = 0; buf[i + 3] = 255;
-      }
-      // Vertical ¥ bar from top of inner circle to bottom
-      else if (dist <= innerR && Math.abs(dx) <= 1 * scale) {
-        buf[i] = 0; buf[i + 1] = 0; buf[i + 2] = 0; buf[i + 3] = 255;
+  const drawLine = (ax: number, ay: number, bx: number, by: number, width: number, clear = false) => {
+    const minX = Math.floor(Math.min(ax, bx) - width);
+    const maxX = Math.ceil(Math.max(ax, bx) + width);
+    const minY = Math.floor(Math.min(ay, by) - width);
+    const maxY = Math.ceil(Math.max(ay, by) + width);
+    for (let y = minY; y <= maxY; y++) {
+      for (let x = minX; x <= maxX; x++) {
+        if (pointToSegmentDistance(x, y, ax, ay, bx, by) <= width / 2) {
+          setPixel(x, y, 255, clear);
+        }
       }
     }
+  };
+
+  const fillPolygon = (points: Array<[number, number]>) => {
+    const minY = Math.floor(Math.min(...points.map((p) => p[1])));
+    const maxY = Math.ceil(Math.max(...points.map((p) => p[1])));
+    for (let y = minY; y <= maxY; y++) {
+      const intersections: number[] = [];
+      for (let i = 0; i < points.length; i++) {
+        const [x1, y1] = points[i];
+        const [x2, y2] = points[(i + 1) % points.length];
+        if ((y1 <= y && y2 > y) || (y2 <= y && y1 > y)) {
+          intersections.push(x1 + ((y - y1) * (x2 - x1)) / (y2 - y1));
+        }
+      }
+      intersections.sort((a, b) => a - b);
+      for (let i = 0; i < intersections.length; i += 2) {
+        for (let x = Math.ceil(intersections[i]); x <= Math.floor(intersections[i + 1]); x++) {
+          setPixel(x, y);
+        }
+      }
+    }
+  };
+
+  const p = (x: number, y: number): [number, number] => [x * scale, y * scale];
+  const cubic = (
+    from: [number, number],
+    c1: [number, number],
+    c2: [number, number],
+    to: [number, number],
+    steps = 18,
+  ): Array<[number, number]> => {
+    const points: Array<[number, number]> = [];
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const mt = 1 - t;
+      points.push([
+        mt * mt * mt * from[0] + 3 * mt * mt * t * c1[0] + 3 * mt * t * t * c2[0] + t * t * t * to[0],
+        mt * mt * mt * from[1] + 3 * mt * mt * t * c1[1] + 3 * mt * t * t * c2[1] + t * t * t * to[1],
+      ]);
+    }
+    return points;
+  };
+
+  const fanStart = p(3.4, 17.8);
+  const fanTop = p(11, 4.8);
+  const fanEnd = p(18.6, 17.8);
+  fillPolygon([
+    ...cubic(fanStart, p(4.4, 9.8), p(7.1, 4.8), fanTop),
+    ...cubic(fanTop, p(14.9, 4.8), p(17.6, 9.8), fanEnd).slice(1),
+    p(11, 14.9),
+  ]);
+
+  const clearDollarStroke = 1.5 * scale;
+  const clearDollarStem = 1.15 * scale;
+  const dollarCurve = [
+    ...cubic(p(13.5, 9.9), p(12.6, 9.4), p(10.3, 9.4), p(9.4, 10.4), 8),
+    ...cubic(p(9.4, 10.4), p(8.6, 11.3), p(9.4, 12.0), p(11.1, 12.5), 8).slice(1),
+    ...cubic(p(11.1, 12.5), p(13.3, 13.1), p(14.3, 14.0), p(13.3, 15.2), 8).slice(1),
+    ...cubic(p(13.3, 15.2), p(12.3, 16.4), p(9.7, 16.4), p(8.5, 15.6), 8).slice(1),
+  ];
+  for (let i = 0; i < dollarCurve.length - 1; i++) {
+    drawLine(dollarCurve[i][0], dollarCurve[i][1], dollarCurve[i + 1][0], dollarCurve[i + 1][1], clearDollarStroke, true);
   }
+  drawLine(11 * scale, 8.8 * scale, 11 * scale, 16.8 * scale, clearDollarStem, true);
 
   const icon = nativeImage.createFromBitmap(buf, {
     width: realSize,
     height: realSize,
-    scaleFactor: 2.0,
+    scaleFactor: scale,
   });
 
   icon.setTemplateImage(true);
@@ -92,16 +166,51 @@ export function createTray(): TrayHandle {
     panelWindow.loadFile(path.join(__dirname, '../../renderer/index.html'));
   }
 
-  // Toggle panel on tray click
+  const showPanel = () => {
+    positionPanel(panelWindow, tray);
+    panelWindow.show();
+    panelWindow.focus();
+    // Notify renderer so it can request fresh data (P2-K)
+    panelWindow.webContents.send('panel:shown');
+  };
+
+  const showSettings = () => {
+    showPanel();
+    panelWindow.webContents.send('panel:open-settings');
+  };
+
+  const createContextMenu = () => {
+    const loginSettings = app.getLoginItemSettings();
+    return Menu.buildFromTemplate([
+      { label: '打开面板', click: showPanel },
+      { label: '设置', click: showSettings },
+      { type: 'separator' },
+      {
+        label: '开机启动',
+        type: 'checkbox',
+        checked: loginSettings.openAtLogin,
+        click: (item) => {
+          app.setLoginItemSettings({ openAtLogin: item.checked });
+        },
+      },
+      { type: 'separator' },
+      { label: '退出 token-panic', click: () => app.quit() },
+    ]);
+  };
+
   tray.on('click', () => {
     if (panelWindow.isVisible()) {
       panelWindow.hide();
     } else {
-      positionPanel(panelWindow, tray);
-      panelWindow.show();
-      // Notify renderer so it can request fresh data (P2-K)
-      panelWindow.webContents.send('panel:shown');
+      showPanel();
     }
+  });
+
+  tray.on('right-click', () => {
+    if (panelWindow.isVisible()) {
+      panelWindow.hide();
+    }
+    tray.popUpContextMenu(createContextMenu());
   });
 
   // Hide panel when clicking outside

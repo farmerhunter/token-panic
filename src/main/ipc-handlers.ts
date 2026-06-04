@@ -1,4 +1,25 @@
 import { ipcMain, BrowserWindow, shell, app } from 'electron';
+/*
+Electron 31+ uses `app.setLoginItemSettings` for macOS login items.
+Older docs reference `.openAtLogin` on the `app` module (removed in v25+).
+When `openAtLogin` is not supported, the Settings switch should be hidden or disabled.
+*/
+
+function isLoginItemSupported(): boolean {
+  return typeof (app as any).setLoginItemSettings === 'function';
+}
+
+function getLoginItemState(): boolean {
+  if (!isLoginItemSupported()) return false;
+  return app.getLoginItemSettings().openAtLogin;
+}
+
+function setLoginItemState(openAtLogin: boolean): void {
+  if (isLoginItemSupported()) {
+    app.setLoginItemSettings({ openAtLogin });
+  }
+}
+
 import type { Store } from '../storage/store';
 import type { CredentialStore } from '../credentials/credential-store';
 import { generateSummary } from '../domain/summary';
@@ -144,6 +165,23 @@ export function registerIpcHandlers(ctx: IpcContext): void {
         message: err.message,
       });
     }
+  });
+
+  // ---- Phase 6B: Login Item ----
+
+  ipcMain.on('startup:get', () => {
+    push(ctx.getPanelWindow(), 'startup:reply', {
+      openAtLogin: getLoginItemState(),
+      supported: isLoginItemSupported(),
+    });
+  });
+
+  ipcMain.on('startup:update', (_event, data: { openAtLogin: boolean }) => {
+    setLoginItemState(data.openAtLogin);
+    push(ctx.getPanelWindow(), 'startup:reply', {
+      openAtLogin: getLoginItemState(),
+      supported: isLoginItemSupported(),
+    });
   });
 
   ipcMain.on('diagnostics:export', async (_event, request: DebugBundleRequest) => {

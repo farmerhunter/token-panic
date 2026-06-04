@@ -2,7 +2,7 @@
 
 > 基于 [architecture.md](architecture.md) 和 [architecture_design_considerations.md](architecture_design_considerations.md)。
 > 每个阶段是对上一阶段的增量扩展，阶段 1 是最小闭环。
-> 当前文档已按 2026-06-03 的实际实现状态更新：阶段 1-4 baseline 已完成，Dashboard interaction contract 已补入阶段 4.5。
+> 当前文档已按 2026-06-04 的实际实现状态更新：阶段 1-6 已完成，下一主线是阶段 7 Service Source Expansion。
 
 ---
 
@@ -15,13 +15,16 @@
 | 阶段 3 Manual Limit Provider | 已完成 | ChatGPT/Codex manual provider、Safari assisted capture、limit summary 已落地 |
 | 阶段 4 Serviceability | 已完成 baseline | metadata trace、parser diagnostics、debug bundle、raw cache 策略已实现 |
 | 阶段 4.5 Dashboard Interaction Contract | 已完成 | 单一 `View` 状态、统一 provider hook、dashboard ViewModel 和测试已落地 |
-| 阶段 5 Multi-provider | 下一主线 | 接入更多 provider 前，先基于现有交互契约扩展 |
-| 阶段 6+ Packaging / Custom Provider / Auto Update | 未来 | 等多 provider 和日常使用稳定后再推进 |
+| 阶段 5 Multi-provider | 已完成 | DeepSeek / Kimi / OpenAI Platform / ChatGPT 四 provider baseline 已稳定 |
+| 阶段 6 Packaging / Daily-use Shell | 已完成并验证 | `.app` / `.dmg`、Login Item、安装 DMG、app icon、tray 左右键菜单、退出入口已通过手动 QA |
+| 阶段 7 Service Source Expansion | 下一主线 | 扩大支持的 LLM 服务范围，支持手工/半自动新增服务源、parser 路径和诊断闭环 |
+| 远期发布工程 | 低优先级 deferred | Code Signing / Notarization / Auto Update / asar，等需要分发现成 DMG 或自动更新时再推进 |
 
 当前验证基线：
 
 - `npm test -- --run`：已覆盖 domain、parser diagnostics、shared diagnostics、integration、dashboard ViewModel。
 - `npm run build`：main + renderer build 已通过。
+- `npm run package:mac` / `npm run package:dir`：packaged app 和 DMG 已通过本地验证。
 
 ---
 
@@ -404,24 +407,32 @@ debug-bundle-<trace_id>/
 
 ---
 
-## 全阶段通用准则
-
-### 测试优先
-
-下列场景必须 test-first——先写测试定义契约，测试失败后再写实现：
-
-- 新增或修改 provider adapter（先写 adapter raw→snapshot 测试 + error case 测试）
-- 新增或修改 Dashboard ViewModel（先写 action availability 测试 + provider isolation 测试）
-- 新增或修改 parser（先写 fixture→parse result 测试 + failure reason 测试）
-- 新增或修改跨层数据字段（先更新 ViewModel test fixture 验证字段传递）
-
-不强制 test-first 的场景：纯样式调整、文案修改、已有的 renderer 组件内部重构（不改变交互契约时）。
-
----
-
 ## 阶段 5：Multi-provider —— 多 provider baseline ✅
 
-（completed — 4 provider stabilized）
+### 状态
+
+已完成。当前 provider baseline：
+
+| Provider | Source | Quota model | 状态 |
+|----------|--------|-------------|------|
+| DeepSeek | official_api | balance | 已实现 |
+| Kimi / Moonshot | official_api | balance | 已实现 |
+| OpenAI Platform | official_api | cost | 已实现 |
+| ChatGPT/Codex | manual + safari_visible_tab | limit | 已实现 |
+
+### 已交付
+
+- `src/shared/provider-metadata.ts` 收束 provider 静态 metadata。
+- Dashboard 按 quota model 分组展示：余额型、限额型、用量/费用。
+- ConfigPanel 通过 metadata 生成 API key sections。
+- Dashboard ViewModel 使用 provider metadata 和 action ids，避免 JSX 散落 provider-specific 判断。
+- DeepSeek / Kimi / OpenAI Platform adapter 具备基础 error reason 和测试覆盖。
+
+### 后续风险
+
+- MiniMax deferred：等待 API 文档或 live probe 验证。
+- OpenAI Platform `/v1/organization/costs` schema 仍需实测验证。
+- Kimi 余额 currency 目前按 CNY 假设，需在真实 API 数据中确认。
 
 ## 阶段 6A：macOS Packaging MVP ✅
 
@@ -437,80 +448,195 @@ debug-bundle-<trace_id>/
 - Playwright 已从 dependencies 移除（无代码引用）
 - electron-builder files 显式排除 `*.map`、`*.test.js`、`*.test.d.ts`
 
-后置：asar 启用、login item、signing/notarization
+### 后续边界
 
-## 阶段 6B：Login Item / Startup（后置）
-## 阶段 6C：Code Signing / Notarization（后置）
-## 阶段 7：Auto Update（后置）
+- `asar: false` 暂时保留，优先保证本地 diagnostics、debug bundle 和 packaged 路径可排查。
+- signing/notarization 已降为低优先级 deferred。
 
-### 前置原则
+## 阶段 6B：Daily-use Shell Polish ✅
 
-- 新 provider 接入不破坏已有 ChatGPT/Codex Safari/manual 入口和 DeepSeek balance 刷新。
+（completed and manually verified — daily-use shell polish）
+
+已交付：
+- Settings 底部增加“开机启动”开关，main/preload/renderer 通过 `startup:get` / `startup:update` 同步。
+- `build/icon.icns` 补齐，Finder/DMG 使用彩色 app icon；tray icon 继续使用单色 template icon。
+- DMG 增加 `/Applications` link，支持标准拖拽安装；DMG 使用纯色背景并禁用 volume icon support file，`package:mac` 后处理写入 `.dmg` 文件 Finder custom icon。
+- Tray 右键菜单增加 `打开面板`、`设置`、`开机启动`、`退出 token-panic`。
+- `设置` 菜单项通过 `panel:open-settings` 事件进入 renderer Settings view。
+- 多显示器下，macOS/Electron `Tray` 不提供强制固定到主屏菜单栏的 API；status item 可能出现在当前活跃显示器的菜单栏，这是平台行为，当前阶段不做伪定位 workaround。
+
+手动 QA：
+1. 打开 `release/token-panic-0.1.0-arm64.dmg`，确认可将 `token-panic.app` 拖到 `/Applications`。
+2. `open release/mac-arm64/token-panic.app` 后，确认菜单栏出现 template icon。
+3. 左键点击菜单栏 icon，确认只打开/隐藏 panel，不弹出右键菜单。
+4. 右键点击菜单栏 icon，确认 dashboard 会先隐藏，菜单项存在且 `退出 token-panic` 可关闭应用。
+5. 右键菜单点击 `设置`，确认进入 Settings。
+6. Settings 中切换“开机启动”，确认状态保持。
+7. Finder 中 `.app` 显示大号 `$` app icon，不再使用 Electron 默认 icon。
+
+验证结果（2026-06-04）：以上 QA 已由用户确认通过。DMG 挂载检查只包含 `.DS_Store`、`Applications`、`token-panic.app`；DMG 文件本身通过 post-package Finder custom icon 保留 branding。
+
+## 阶段 7：Service Source Expansion —— 扩大服务源支持（下一主线）
+
+### 目标
+
+把 token-panic 从“固定几个 provider 的 dashboard”推进到“可以系统化扩展 LLM 服务源”的工具。重点不是继续发布工程，而是降低新增服务源的成本，并让新增 provider 的数据路径、parser、diagnostics 和 UI 合约都可验证。
+
+### 用户价值
+
+用户面对一个新的 LLM 服务时，可以选择合适接入方式：
+
+- 官方 API：配置 API key 后自动刷新。
+- 手工录入：没有 API 时，手动填入余额/限额/费用数据。
+- 半自动读取：用户打开网页后，由应用读取可见文本并本地解析，结果必须确认后保存。
+- 调试闭环：parser 失败时能导出 diagnostics，回到 coding agent 这里补 fixture、修 parser、重新验证。
+
+### 支持的 source 类型
+
+| Source | 适用场景 | 当前策略 |
+|--------|----------|----------|
+| `official_api` | 服务商提供稳定 usage/balance/cost API | 优先使用 |
+| `manual` | 没有 API 或 API 不覆盖订阅限额 | 支持结构化录入 |
+| `visible_tab_text` | 用户已登录并打开可见页面，且低频读取可接受 | 用户确认、只读文本、本地 parser |
+| `custom_parser` | 用户提供样本文本，agent/规则生成 parser | Phase 7 重点探索 |
+| `browser_scrape` | 页面允许自动化且无反检测/绕过风险 | 默认不启用，需单独评估 |
+
+### Phase 7A：Provider Intake Contract
+
+先定义新增服务源的“入口契约”，避免每次接 provider 都从代码里猜。
+
+交付：
+
+- Provider intake checklist：
+  - 服务名、官网、数据入口 URL/API endpoint
+  - 计量模型：`balance` / `limit` / `cost`
+  - source 类型：official/manual/visible_tab_text/custom_parser
+  - auth 方式和凭证风险
+  - refresh 语义：自动、手动、用户确认
+  - failure states：auth、rate limit、schema change、manual required
+  - diagnostics 需要保留的字段
+- 更新 provider metadata schema，确认是否需要：
+  - `source_capabilities`
+  - `capture_methods`
+  - `parser_profile`
+  - `risk_level`
+- 为 provider metadata 增加测试，保证新增 provider 必须声明 source、quota model、配置入口和 action。
+
+验收：
+
+- 不改业务逻辑也能用 checklist 评估一个新服务是否可接。
+- 新 provider metadata 缺少关键字段时测试失败。
+
+### Phase 7B：Manual Provider Template
+
+让“手工添加服务源”成为一条完整路径，而不是 ChatGPT 特例。
+
+交付：
+
+- 通用 manual snapshot 输入模型：
+  - provider_id
+  - display_name
+  - quota_model
+  - captured_at
+  - balance/limit/cost payload
+- Renderer 支持从 provider metadata 渲染 manual input action。
+- Dashboard ViewModel 支持多个 manual/limit provider，不再默认只有 ChatGPT。
+- Tests：
+  - manual provider 保存后 summary 正确出现
+  - 多个 manual providers 互不覆盖
+  - action availability 在 empty/saved/error 状态下稳定
+
+验收：
+
+- 可以通过 metadata + structured input 添加一个非 ChatGPT 的 manual limit provider。
+- 不新增 JSX provider-specific 分支。
+
+### Phase 7C：Visible Text Parser Pipeline
+
+把 Safari assisted capture 的经验泛化成“可见文本读取 + parser diagnostics + 用户确认”的 provider pipeline。
+
+交付：
+
+- Parser profile abstraction：
+  - provider_id
+  - accepted URL pattern
+  - parser strategy list
+  - candidate line rules
+  - failure reasons
+- 通用 parse result：
+  - parsed snapshot candidate
+  - confidence
+  - candidate lines
+  - failure_reason
+  - trace_id
+- UI 确认页复用：
+  - 展示来源 URL、读取时间、候选值、diagnostics
+  - 用户确认后才写入 snapshot
+- Debug bundle 能直接支持新增 parser fixture test。
+
+验收：
+
+- ChatGPT/Codex 现有 parser 可以迁移到 parser profile 形式。
+- 新增一个 provider parser 时，先写 fixture test 再实现。
+- Parser 失败时 diagnostics 足够定位“读到了什么、为什么没解析”。
+
+### Phase 7D：First New Source Candidate
+
+选择一个新服务做端到端验证。优先级按低风险排序：
+
+1. 有官方 API 的 provider：优先。
+2. 只需要手工录入的 provider：次优。
+3. visible tab text provider：仅在用户确认页面低风险、低频读取可接受时做。
+
+候选：
+
+- MiniMax：等待官方 API 文档和余额/用量 endpoint 确认。
+- Anthropic Console：如果没有稳定 API，先只评估 manual 或 visible text，不做自动化登录。
+- Google AI Studio / Gemini：先调研是否有可用 usage/billing API。
+- 其他用户实际使用的 LLM 服务：以真实需求优先。
+
+验收：
+
+- 新 provider 从 intake checklist 到 metadata、adapter/parser、ViewModel、tests、docs 形成完整路径。
+- 不能因为一个 provider 特例破坏已有 DeepSeek/Kimi/OpenAI/ChatGPT 行为。
+
+### 明确不做
+
+- 不做 ChatGPT stealth、自动登录、cookie/storageState 复用。
+- 不做绕过验证码、bot protection、rate limit 或 protective measures。
+- 不把 browser automation 作为默认扩展路径。
+- 不在 Phase 7 做 signing/notarization/auto update。
+
+## 远期发布工程（低优先级 deferred）
+
+以下内容放到很后面，当前不占用阶段编号：
+
+- Code Signing / Notarization：仅当需要向普通用户直接分发现成 `.dmg`、稳定 Gatekeeper/Automation 权限或进入 auto update 时再推进。
+- Auto Update：依赖 signing/notarization 和发布渠道。
+- `asar` 启用：当前 `asar: false` 有利于本地排障和路径可见性；若后续需要减小源码暴露或改善 package hygiene，再评估。
+
+---
+
+## 全阶段通用准则
+
+### 测试优先
+
+下列场景必须 test-first——先写测试定义契约，测试失败后再写实现：
+
+- 新增或修改 provider adapter（先写 adapter raw→snapshot 测试 + error case 测试）
+- 新增或修改 Dashboard ViewModel（先写 action availability 测试 + provider isolation 测试）
+- 新增或修改 parser（先写 fixture→parse result 测试 + failure reason 测试）
+- 新增或修改跨层数据字段（先更新 ViewModel test fixture 验证字段传递）
+
+不强制 test-first 的场景：纯样式调整、文案修改、已有的 renderer 组件内部重构（不改变交互契约时）。
+
+### Provider 扩展原则
+
+- 新 provider 接入不破坏已有 ChatGPT/Codex Safari/manual 入口和 DeepSeek/Kimi/OpenAI 刷新。
 - Dashboard 行为由 `toDashboardViewModel()` 和其测试保护。
 - JSX 不直接写 provider-specific 判断。
-- 每加一个 provider，补 ViewModel tests。
-
-### 增量目标
-
-- OpenAI Platform（official_api + cost）— 已实现
-- Kimi / Moonshot（official_api + balance）— 已实现
-- MiniMax（official_api + balance）— deferred，等待 API 文档验证
-- 多 provider 配置面板（ApiKeySection 组件 × 3）+ config-view-model.ts 契约
-- 按 quota_model 分组展示（余额型 / 限额型 / 用量费用型），balanceProviders 数组化
-- 复用阶段 4.5 的 dashboard ViewModel，不在 JSX 中新增散落的 provider-specific action 判断
-- 新 provider 的 failure state、diagnostics 和 user-facing action 必须先进入 provider summary / interaction contract
-
-### 增量用户体验
-
-面板按模型分组，4 个 provider 一目了然。
-
-### 进入阶段 5 前置检查
-
-- Dashboard interaction contract 与当前 UI 行为一致。
-- 新 provider 的 source、quota_model、refresh 语义已在 design decision 中明确。
-- 如果 provider 依赖第三方 API 或页面行为，先做最小可丢弃实验验证可行性。
-- 每个 provider 的配置入口、刷新入口、错误状态和 fallback 行为必须能被 ViewModel 表达。
-
----
-
-## 阶段 6：Packaging —— macOS 打包
-
-（阶段 5 完成后扩展）
-
-### 增量目标
-
-- electron-builder 打包 .dmg
-- 启动项支持
-- macOS 公证（notarization）
-
-### 增量用户体验
-
-用户可通过 .dmg 安装，数据目录固定在 `~/Library/Application Support/token-panic/`。
-
----
-
-## 阶段 7：Custom Provider —— 自定义能力
-
-（阶段 6 完成后扩展）
-
-### 增量目标
-
-- LLM 辅助分析网页（custom_parser adapter）
-- 用户自定义 provider 配置流程
-- 对明确允许自动化或用户自有页面的数据源，重新评估 browser_scrape/custom_parser 的可行性
-
----
-
-## 阶段 8：Auto Update —— 自动更新
-
-（阶段 6 完成后扩展，独立于阶段 7）
-
-### 增量目标
-
-- electron-updater 集成
-- 更新 feed 服务器配置
-- 代码签名证书
-- 回滚策略
+- 每加一个 provider，补 adapter tests、metadata tests、ViewModel tests。
+- 新 provider 的 failure state、diagnostics 和 user-facing action 必须先进入 provider summary / interaction contract。
 
 ---
 

@@ -8,10 +8,11 @@
 
 ## 追踪的服务
 
-- ChatGPT / Codex
-- DeepSeek
-- OpenAI Platform
-- MiniMax
+- DeepSeek（余额型，official API）
+- Kimi / Moonshot（余额型，official API）
+- OpenAI Platform（费用型，official API）
+- ChatGPT / Codex（限额型，Safari 辅助读取 / 手动录入）
+- MiniMax（待接入）
 - （可扩展）
 
 ## 核心指标
@@ -38,12 +39,18 @@ token-panic 是一个 macOS 菜单栏工具，使用 Electron + React + TypeScri
 
 数据获取采用分层 provider adapter：
 
-- 优先使用 official API。
-- API 不可用或覆盖不完整时，使用 Playwright 复用登录态抓取页面。
-- 后续支持手动录入和自定义 provider。
+- 优先使用 official API（DeepSeek、OpenAI Platform、Kimi）。
+- ChatGPT/Codex 通过 Safari 辅助读取用户已打开的页面，或手动录入限额。
+- 不保存网页登录凭证，不做 headless 浏览器自动抓取。
 
 核心域模型把 provider 分为 `balance`、`limit`、`usage`、`cost` 等配额模型，UI 根据模型展示余额、限额、用量和消耗速度。
 
 详细设计见 [architecture.md](design_docs/architecture.md)。
 
 架构设计思想复盘见 [architecture_design_considerations.md](design_docs/architecture_design_considerations.md)。
+
+---
+
+## 轶事和感想
+
+另外，用 Vibe Coding 的方式开发此应用的感受和感悟见 [anecdote_Introducing_view_model.md](design_docs/anecdote_Introducing_view_model.md)。

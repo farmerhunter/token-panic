@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useSnapshot } from './hooks/useSnapshot';
 import { BalancePanel } from './components/BalancePanel';
 import { LimitPanel } from './components/LimitPanel';
@@ -33,6 +33,12 @@ export function App() {
   const { summary: openaiSummary, loading: openaiLoading, refresh: refreshOpenAI } = useSnapshot('openai_platform');
   const { summary: kimiSummary, loading: kimiLoading, refresh: refreshKimi } = useSnapshot('kimi');
   const [view, setView] = useState<View>({ page: 'dashboard' });
+
+  useEffect(() => {
+    return window.electronAPI?.onOpenSettingsRequested(() => {
+      setView({ page: 'settings' });
+    });
+  }, []);
 
   // ---- Navigation helpers ----
 

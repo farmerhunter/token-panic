@@ -30,6 +30,12 @@ export interface ElectronAPI {
 
   // Panel lifecycle (P2-K)
   onPanelShown: (callback: () => void) => Unsubscribe;
+  onOpenSettingsRequested: (callback: () => void) => Unsubscribe;
+
+  // Phase 6B — Login Item
+  getStartupSettings: () => void;
+  setStartupSettings: (openAtLogin: boolean) => void;
+  onStartupReply: (callback: (data: { openAtLogin: boolean; supported: boolean }) => void) => Unsubscribe;
 
   // Diagnostics
   recordParserDiagnostics: (data: unknown) => void;
